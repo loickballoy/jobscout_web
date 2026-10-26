@@ -28,8 +28,15 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: ${TRAEFIK_NETWORK:-traefik-public}
+      # Deux routeurs vers le même service : http:// (entrypoint web) et https:// (websecure).
+      # Sans certificat dédié, Traefik présente son certificat auto-signé en HTTPS.
       traefik.http.routers.jobscout.rule: Host(`${JOBSCOUT_HOST}`)
-      traefik.http.routers.jobscout.entrypoints: ${TRAEFIK_ENTRYPOINT:-web}
+      traefik.http.routers.jobscout.entrypoints: web
+      traefik.http.routers.jobscout.service: jobscout
+      traefik.http.routers.jobscout-secure.rule: Host(`${JOBSCOUT_HOST}`)
+      traefik.http.routers.jobscout-secure.entrypoints: websecure
+      traefik.http.routers.jobscout-secure.tls: "true"
+      traefik.http.routers.jobscout-secure.service: jobscout
       traefik.http.services.jobscout.loadbalancer.server.port: "3000"
       # Scans longs (jusqu'à 20 min) diffusés en flux : pas de compression qui bufferise.
       traefik.http.services.jobscout.loadbalancer.responseforwarding.flushinterval: "100ms"
