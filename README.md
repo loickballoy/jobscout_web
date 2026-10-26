@@ -119,6 +119,10 @@ Page **Modèle CV** : un CV « maître » en JSON (clusters de postes, banque de
 
 Profil › **Zones de recherche** : Paris et Île-de-France, Lyon et agglomération, Suisse romande. Le scan interroge ces lieux (France Travail par département, LinkedIn et Talent.com par ville) et la page Offres s'ouvre filtrée sur « Mes zones » (`lib/zones.ts`).
 
+## Niveau de poste
+
+Profil › **Niveau de poste** › « Postes junior uniquement » : niveau de chaque offre déduit localement (intitulé « Senior », « Lead », « Junior » ; « 5 ans d'expérience », « 3+ years » ; champ « Débutant accepté » de France Travail), filtre « Junior » de la page Offres actif d'office, −25 au score des postes seniors (−10 pour 3 à 4 ans), recherche LinkedIn sur « Entry level » et « Associate » (`lib/seniority.ts`).
+
 ## Génération de documents
 
 `data/documents/…` — CV et lettre en PDF **et** DOCX, avec une boucle de rétrécissement qui garantit une page A4. Langue détectée par offre (français, ou anglais si l'annonce est en anglais). Relecture automatique : orthographe, affirmations non étayées par le profil. Message court (V.I.E) réservé aux offres V.I.E.

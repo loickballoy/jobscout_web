@@ -32,6 +32,8 @@ export type ScrapeCriteria = {
   maxOffres?: number;
   /** Zones de recherche (lib/zones) : chaque source cible leurs lieux au lieu du pays entier. */
   zones?: Zone[];
+  /** Postes junior uniquement (lib/seniority-store) : les sources qui le permettent filtrent à la source. */
+  juniorOnly?: boolean;
 };
 
 export type ProgressEvent =

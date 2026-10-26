@@ -73,6 +73,8 @@ type FtApiJob = {
   dateActualisation?: string;
   origineOffre?: { urlOrigine?: string };
   competences?: { libelle?: string }[];
+  /** « Débutant accepté », « Expérience exigée de 3 An(s) » : lu par le filtre de niveau (lib/seniority). */
+  experienceLibelle?: string;
 };
 
 function apiJobToScraped(job: FtApiJob): ScrapedOffre | null {
@@ -92,7 +94,11 @@ function apiJobToScraped(job: FtApiJob): ScrapedOffre | null {
     .map((c) => c.libelle)
     .filter(Boolean)
     .join(", ");
-  const fullText = skills ? `${description}\n\nCompétences : ${skills}` : description;
+  const extras = [
+    skills ? `Compétences : ${skills}` : "",
+    job.experienceLibelle ? `Expérience : ${job.experienceLibelle}` : "",
+  ].filter(Boolean);
+  const fullText = extras.length ? `${description}\n\n${extras.join("\n")}` : description;
 
   return {
     source_id: id,
