@@ -75,7 +75,9 @@ export async function middleware(req: NextRequest) {
         } catch {
           return forbidden("origine invalide");
         }
-        if (!allowed.has(o.hostname.toLowerCase()) || o.host.toLowerCase() !== host.toLowerCase()) {
+        // Hôte vu par le navigateur : Host, ou X-Forwarded-Host si un proxy a réécrit Host.
+        const seen = [host, req.headers.get("x-forwarded-host") ?? ""].map((h) => h.split(",")[0].trim().toLowerCase());
+        if (!allowed.has(o.hostname.toLowerCase()) || !seen.includes(o.host.toLowerCase())) {
           return forbidden("origine externe");
         }
       }
@@ -87,11 +89,14 @@ export async function middleware(req: NextRequest) {
     const expected = await expectedSessionToken();
     if (!token || !safeEqual(token, expected)) {
       if (isApi) return NextResponse.json({ error: "Connexion requise." }, { status: 401 });
-      // Redirection RELATIVE : le navigateur la résout sur l'adresse qu'il a tapée.
-      // Derrière un reverse proxy (Traefik, Tailscale Serve), l'hôte et le protocole
-      // vus par le serveur ne sont pas forcément ceux du navigateur.
-      const target = pathname === "/" ? "/login" : `/login?next=${encodeURIComponent(pathname + req.nextUrl.search)}`;
-      return new NextResponse(null, { status: 307, headers: { location: target } });
+      // URL de même origine que la requête : Next la réécrit en en-tête Location
+      // relatif (« /login »), que le navigateur résout sur l'adresse qu'il a tapée,
+      // derrière n'importe quel reverse proxy (Traefik, Tailscale Serve). Un
+      // Location relatif écrit à la main, lui, fait planter le middleware.
+      const url = req.nextUrl.clone();
+      url.pathname = "/login";
+      url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname + req.nextUrl.search)}`;
+      return NextResponse.redirect(url);
     }
   }
 

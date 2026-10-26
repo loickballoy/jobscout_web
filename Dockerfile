@@ -50,7 +50,9 @@ RUN if [ "$WITH_LINKEDIN" = "1" ]; then \
 
 RUN mkdir -p /data && chown node:node /data
 VOLUME /data
-USER node
+# Démarre en root le temps de rendre /data à « node », puis abandonne les privilèges.
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 EXPOSE 3000
 
 HEALTHCHECK --interval=60s --timeout=5s --start-period=60s --retries=3 \

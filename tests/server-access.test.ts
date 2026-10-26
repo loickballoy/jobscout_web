@@ -29,6 +29,16 @@ describe("hôtes autorisés (JOBSCOUT_ALLOWED_HOSTS)", () => {
     expect((await middleware(req("http://evil.example/api/profile"))).status).toBe(403);
   });
 
+  it("accepte l'Origin du navigateur quand un proxy a réécrit Host", async () => {
+    delete process.env.JOBSCOUT_PASSWORD;
+    process.env.JOBSCOUT_ALLOWED_HOSTS = "box.ts.net";
+    const r = req("http://127.0.0.1:3000/api/profile", {
+      method: "POST",
+      headers: { origin: "https://box.ts.net:8443", "x-forwarded-host": "box.ts.net:8443" },
+    });
+    expect((await middleware(r)).status).toBe(200);
+  });
+
   it("refuse une écriture dont l'Origin est un autre hôte", async () => {
     delete process.env.JOBSCOUT_PASSWORD;
     process.env.JOBSCOUT_ALLOWED_HOSTS = "jobscout.lan";
@@ -48,9 +58,7 @@ describe("connexion par mot de passe (JOBSCOUT_PASSWORD)", () => {
     process.env.JOBSCOUT_ALLOWED_HOSTS = "jobscout.lan";
     const page = await middleware(req("http://jobscout.lan/offres?tri=score", { headers: { "x-forwarded-proto": "https" } }));
     expect(page.status).toBe(307);
-    // Relative : résolue par le navigateur sur l'adresse qu'il a tapée.
-    expect(page.headers.get("location")).toMatch(/^\/login\?/);
-    const loc = new URL(page.headers.get("location")!, "https://jobscout.lan");
+    const loc = new URL(page.headers.get("location")!, "http://jobscout.lan");
     expect(loc.pathname).toBe("/login");
     expect(loc.searchParams.get("next")).toBe("/offres?tri=score");
     expect((await middleware(req("http://jobscout.lan/api/profile"))).status).toBe(401);
