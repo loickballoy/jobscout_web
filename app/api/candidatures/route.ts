@@ -29,6 +29,13 @@ export async function PATCH(req: NextRequest) {
   if (patch.status && !STATUS.includes(patch.status)) {
     return NextResponse.json({ error: "statut invalide" }, { status: 400 });
   }
+  if (patch.applied_at !== undefined) {
+    // Date de candidature : AAAA-MM-JJ (champ date du navigateur), enregistrée à midi.
+    if (typeof patch.applied_at !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(patch.applied_at)) {
+      return NextResponse.json({ error: "date de candidature invalide (AAAA-MM-JJ)" }, { status: 400 });
+    }
+    patch.applied_at = `${patch.applied_at} 12:00:00`;
+  }
   updateCandidature(Number(id), patch);
   return NextResponse.json({ ok: true });
 }
