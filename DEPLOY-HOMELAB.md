@@ -49,6 +49,33 @@ docker compose logs -f jobscout   # expect: [daily-scan] programmé chaque jour 
 The first build takes a few minutes (dependencies, then Chromium for LinkedIn).
 Open `http://<JOBSCOUT_HOST>` (or `https://`) from any device on your tailnet.
 
+## 3b. Reach it from your tailnet with Tailscale Serve (recommended)
+
+Tailscale's MagicDNS resolves machine names (`homelab.tail1234.ts.net`) but
+not names in front of them (`jobscout.homelab.tail1234.ts.net`). The reliable
+way in is Tailscale Serve: it publishes JobScout on the machine's own
+Tailscale name, with a real HTTPS certificate, visible only on your tailnet.
+
+1. In the Tailscale admin console, under **DNS**, enable MagicDNS and
+   **HTTPS Certificates**.
+2. In `.env`, accept the machine name, then restart:
+   ```
+   JOBSCOUT_EXTRA_HOSTS=homelab.tail1234.ts.net
+   ```
+   ```bash
+   docker compose up -d
+   ```
+3. On the homelab, publish the container's local port (`127.0.0.1:3000`, see
+   `JOBSCOUT_LOCAL_PORT`) on port 8443. Port 443 is already taken by Traefik.
+   ```bash
+   sudo tailscale serve --bg --https=8443 http://127.0.0.1:3000
+   tailscale serve status
+   ```
+4. Open `https://homelab.tail1234.ts.net:8443` from any device on your tailnet.
+
+`--bg` keeps the setting across reboots. To remove it:
+`sudo tailscale serve --https=8443 off`.
+
 ## 4. First use
 
 1. Copy your master CV template next to the database **before** the first start
@@ -98,8 +125,13 @@ git pull && docker compose up -d --build
 
 ## Troubleshooting
 
-- **403 "hôte non autorisé"**: the hostname in the browser is not the one in
-  `JOBSCOUT_HOST`. To use several names, separate them with commas.
+- **403 "hôte non autorisé"**: the hostname in the browser is neither
+  `JOBSCOUT_HOST` nor in `JOBSCOUT_EXTRA_HOSTS` (comma-separated).
+- **Browser can't reach the name but `curl -H "Host: <name>" http://127.0.0.1`
+  on the homelab returns `307` to `/login`**: JobScout and Traefik work, the
+  name does not resolve on your device. Use Tailscale Serve (section 3b).
+  On Windows, `nslookup` ignores Tailscale's DNS, so test in the browser or with
+  `Resolve-DnsName` in PowerShell.
 - **Scan stuck at the start behind Traefik**: the scan streams its progress.
   Make sure no compression middleware is applied to this router.
 - **Lighter image without LinkedIn**: set `WITH_LINKEDIN=0` in `.env`, then rebuild.

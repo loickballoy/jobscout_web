@@ -16,7 +16,12 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
-RUN npm run build && npm prune --omit=dev --no-audit --no-fund
+# TypeScript reste dans l'image : `next start` relit next.config.ts au démarrage
+# (sans lui, Next tente de l'installer à chaud puis plante au premier lancement).
+RUN npm run build \
+ && mv node_modules/typescript /tmp/typescript \
+ && npm prune --omit=dev --no-audit --no-fund \
+ && mv /tmp/typescript node_modules/typescript
 
 # ---------------------------------------------------------------- runtime
 FROM node:${NODE_VERSION}-bookworm-slim

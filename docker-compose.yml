@@ -13,7 +13,8 @@ services:
     environment:
       TZ: ${TZ:-Europe/Paris}
       # Nom(s) d'hôte sous lesquels vous ouvrez JobScout, séparés par des virgules.
-      JOBSCOUT_ALLOWED_HOSTS: ${JOBSCOUT_HOST:?définissez JOBSCOUT_HOST dans .env}
+      # JOBSCOUT_EXTRA_HOSTS : autres noms acceptés (ex. le nom Tailscale de la machine, pour Tailscale Serve).
+      JOBSCOUT_ALLOWED_HOSTS: ${JOBSCOUT_HOST:?définissez JOBSCOUT_HOST dans .env},${JOBSCOUT_EXTRA_HOSTS:-}
       # Mot de passe de connexion (obligatoire ici : l'app est joignable par le réseau).
       JOBSCOUT_PASSWORD: ${JOBSCOUT_PASSWORD:?définissez JOBSCOUT_PASSWORD dans .env}
       # Scan automatique chaque jour à cette heure (HH:MM, fuseau TZ) ; vide = désactivé.
@@ -23,6 +24,9 @@ services:
       FT_CLIENT_SECRET: ${FT_CLIENT_SECRET:-}
     volumes:
       - ./data:/data
+    # Accès direct depuis la machine seulement (127.0.0.1) : cible de `tailscale serve`.
+    ports:
+      - "127.0.0.1:${JOBSCOUT_LOCAL_PORT:-3000}:3000"
     networks:
       - traefik
     labels:

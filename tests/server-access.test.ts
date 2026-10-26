@@ -48,8 +48,9 @@ describe("connexion par mot de passe (JOBSCOUT_PASSWORD)", () => {
     process.env.JOBSCOUT_ALLOWED_HOSTS = "jobscout.lan";
     const page = await middleware(req("http://jobscout.lan/offres?tri=score", { headers: { "x-forwarded-proto": "https" } }));
     expect(page.status).toBe(307);
-    const loc = new URL(page.headers.get("location")!);
-    expect(loc.origin).toBe("https://jobscout.lan");
+    // Relative : résolue par le navigateur sur l'adresse qu'il a tapée.
+    expect(page.headers.get("location")).toMatch(/^\/login\?/);
+    const loc = new URL(page.headers.get("location")!, "https://jobscout.lan");
     expect(loc.pathname).toBe("/login");
     expect(loc.searchParams.get("next")).toBe("/offres?tri=score");
     expect((await middleware(req("http://jobscout.lan/api/profile"))).status).toBe(401);
