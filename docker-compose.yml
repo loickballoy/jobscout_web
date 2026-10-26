@@ -27,7 +27,7 @@ services:
       - traefik
     labels:
       traefik.enable: "true"
-      traefik.docker.network: ${TRAEFIK_NETWORK:-traefik}
+      traefik.docker.network: ${TRAEFIK_NETWORK:-traefik-public}
       traefik.http.routers.jobscout.rule: Host(`${JOBSCOUT_HOST}`)
       traefik.http.routers.jobscout.entrypoints: ${TRAEFIK_ENTRYPOINT:-web}
       traefik.http.services.jobscout.loadbalancer.server.port: "3000"
@@ -36,5 +36,5 @@ services:
 
 networks:
   traefik:
-    name: ${TRAEFIK_NETWORK:-traefik}
+    name: ${TRAEFIK_NETWORK:-traefik-public}
     external: true

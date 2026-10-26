@@ -12,7 +12,7 @@ every morning by itself, so new offers are already scored when you open it.
 ## 1. Prerequisites on the homelab
 
 - Docker with the Compose plugin.
-- Traefik running in Docker, attached to a Docker network (named `traefik` below).
+- Traefik running in Docker, attached to a Docker network (named `traefik-public` below).
 - A hostname that reaches Traefik over Tailscale. For example, the MagicDNS name
   of the homelab (`homelab.tail1234.ts.net`) or a subdomain you route to it.
 
@@ -31,7 +31,7 @@ Fill in at least:
 | `JOBSCOUT_HOST` | `jobscout.homelab.tail1234.ts.net` | Hostname you type in the browser. Traefik routes it and the app accepts it. |
 | `JOBSCOUT_PASSWORD` | a long password | Login screen. Required. |
 | `JOBSCOUT_DAILY_SCAN` | `06:30` | Automatic daily scan (`TZ` time zone). Leave empty to disable it. |
-| `TRAEFIK_NETWORK` | `traefik` | Docker network shared with Traefik. |
+| `TRAEFIK_NETWORK` | `traefik-public` | Docker network shared with Traefik. |
 | `TRAEFIK_ENTRYPOINT` | `web` or `websecure` | Traefik entrypoint (HTTP:80 or HTTPS:443). |
 
 If you use `websecure` with a certificate resolver, add the matching label in
