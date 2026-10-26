@@ -87,12 +87,11 @@ export async function middleware(req: NextRequest) {
     const expected = await expectedSessionToken();
     if (!token || !safeEqual(token, expected)) {
       if (isApi) return NextResponse.json({ error: "Connexion requise." }, { status: 401 });
-      // URL absolue reconstruite depuis l'en-tête Host (et le protocole vu par le
-      // reverse proxy) : derrière Traefik, req.nextUrl porte l'adresse interne.
-      const proto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || "http";
-      const url = new URL("/login", `${proto}://${req.headers.get("host") ?? "localhost"}`);
-      if (pathname !== "/") url.searchParams.set("next", pathname + req.nextUrl.search);
-      return NextResponse.redirect(url);
+      // Redirection RELATIVE : le navigateur la résout sur l'adresse qu'il a tapée.
+      // Derrière un reverse proxy (Traefik, Tailscale Serve), l'hôte et le protocole
+      // vus par le serveur ne sont pas forcément ceux du navigateur.
+      const target = pathname === "/" ? "/login" : `/login?next=${encodeURIComponent(pathname + req.nextUrl.search)}`;
+      return new NextResponse(null, { status: 307, headers: { location: target } });
     }
   }
 
