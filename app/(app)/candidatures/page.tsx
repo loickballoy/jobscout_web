@@ -1,4 +1,4 @@
-import { listCandidatures, candidaturesCounts } from "@/lib/db/candidatures";
+import { listCandidatures, candidaturesCounts, getWeeklyGoal } from "@/lib/db/candidatures";
 import { PageHeader } from "@/components/app/page-header";
 import { CandidaturesTable } from "./table";
 
@@ -15,7 +15,7 @@ export default async function CandidaturesPage() {
   return (
     <>
       <PageHeader eyebrow="Faire avancer" title="Candidatures" subtitle={subtitle} />
-      <CandidaturesTable initial={items} />
+      <CandidaturesTable initial={items} weeklyGoal={getWeeklyGoal()} />
     </>
   );
 }

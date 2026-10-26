@@ -125,7 +125,7 @@ Profil › **Niveau de poste** › « Postes junior uniquement » : niveau de ch
 
 ## Suivi des candidatures
 
-Page **Candidatures** : statut, date de candidature (modifiable ; une candidature « En cours » passée à « Envoyée » prend la date du jour), échéance, contact, notes. Une candidature restée **« Envoyée » sans réponse 14 jours après sa date de candidature passe en « Archivée »** (onglet dédié, note datée), à chaque ouverture du suivi et au scan quotidien ; délai réglable par `JOBSCOUT_ARCHIVE_DAYS`. **Importer** accepte l'export de JobScout ou un tracker Excel personnel sur plusieurs feuilles (« Job Details », « Pre-Interview », « Interviews »…), fusionnées par entreprise et poste ; un réimport ne crée pas de doublon (`lib/excel/io.ts`).
+Page **Candidatures** : statut, date de candidature (modifiable ; une candidature « En cours » passée à « Envoyée » prend la date du jour), échéance, contact, notes. Une candidature restée **« Envoyée » sans réponse 14 jours après sa date de candidature passe en « Archivée »** (onglet dédié, note datée), à chaque ouverture du suivi et au scan quotidien ; délai réglable par `JOBSCOUT_ARCHIVE_DAYS`. En haut de la page : **vitrine des offres acceptées** (salaire et date de début notés dans la fiche), **entonnoir** envoyées → réponses → entretiens → offres (un entretien reste compté même refusé ensuite, grâce à l'historique des statuts) et **objectif hebdomadaire** (10 par défaut, modifiable). **Importer** accepte l'export de JobScout ou un tracker Excel personnel sur plusieurs feuilles (« Job Details », « Pre-Interview », « Interviews »…), fusionnées par entreprise et poste ; un réimport ne crée pas de doublon (`lib/excel/io.ts`).
 
 ## Génération de documents
 

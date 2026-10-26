@@ -142,3 +142,14 @@ CREATE TABLE IF NOT EXISTS scan_runs (
   status TEXT NOT NULL DEFAULT 'running',
   log TEXT NOT NULL DEFAULT '[]'
 );
+
+-- Historique des statuts : quand une candidature est passée à « Entretien », « Acceptée »…
+-- (l'entonnoir compte un entretien même si la candidature a été refusée ensuite).
+CREATE TABLE IF NOT EXISTS candidature_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  candidature_id INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (candidature_id) REFERENCES candidatures(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_candidature_events ON candidature_events(candidature_id, status);

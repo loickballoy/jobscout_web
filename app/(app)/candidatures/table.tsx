@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { CandidatureWithOffre } from "@/lib/db/candidatures";
+import { TrackerSummary } from "@/components/app/tracker-summary";
 
 const STATUS_OPTIONS: { id: string; label: string; variant: BadgeVariant }[] = [
   { id: "envoyee", label: "Envoyée", variant: "info" },
@@ -37,7 +38,7 @@ const EMPTY_STAGE_COPY: Record<string, { title: string; description: string }> =
 const UNSAVED_MESSAGE = "Des modifications du suivi ne sont pas enregistrées. Quitter la page sans les enregistrer ?";
 
 /** Brouillon des champs à enregistrement explicite (le statut, lui, part dès qu'on le change). */
-type Draft = { notes: string; contact: string; deadline: string; applied: string };
+type Draft = { notes: string; contact: string; deadline: string; applied: string; salary: string; start: string };
 type Row = CandidatureWithOffre;
 
 /** « Toutes » = les candidatures actives : les archivées ont leur propre onglet. */
@@ -78,15 +79,21 @@ function applyUrl(row: Row): string | null {
 }
 
 function savedDraft(row: Row): Draft {
-  return { notes: row.notes ?? "", contact: row.contact ?? "", deadline: row.deadline ?? "", applied: row.applied_at?.slice(0, 10) ?? "" };
+  return {
+    notes: row.notes ?? "", contact: row.contact ?? "", deadline: row.deadline ?? "", applied: row.applied_at?.slice(0, 10) ?? "",
+    salary: row.offer_salary ?? "", start: row.offer_start ?? "",
+  };
 }
 
 function sameDraft(a: Draft, b: Draft): boolean {
-  return a.notes === b.notes && a.contact === b.contact && a.deadline === b.deadline && a.applied === b.applied;
+  return a.notes === b.notes && a.contact === b.contact && a.deadline === b.deadline && a.applied === b.applied && a.salary === b.salary && a.start === b.start;
 }
 
-export function CandidaturesTable({ initial }: { initial: Row[] }) {
+export function CandidaturesTable({ initial, weeklyGoal = 10 }: { initial: Row[]; weeklyGoal?: number }) {
   const [rows, setRows] = useState(initial);
+  const [goal, setGoal] = useState(weeklyGoal);
+  // Offre tout juste acceptée : sa carte de vitrine est mise en valeur quelques secondes.
+  const [highlightId, setHighlightId] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [openRows, setOpenRows] = useState<Set<number>>(new Set());
   const [query, setQuery] = useState("");
@@ -142,6 +149,18 @@ export function CandidaturesTable({ initial }: { initial: Row[] }) {
     return () => document.removeEventListener("click", onClick, true);
   }, [dirtyCount]);
 
+  async function saveGoal(next: number) {
+    const res = await fetch("/api/settings/weekly-goal", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ goal: next }) });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && typeof data.goal === "number") setGoal(data.goal);
+  }
+
+  function openRow(row: Row) {
+    setStatusFilter("");
+    setQuery("");
+    setOpenRows((current) => new Set(current).add(row.id));
+  }
+
   async function patch(id: number, body: Record<string, string | null>): Promise<boolean> {
     setError(null);
     try {
@@ -171,6 +190,10 @@ export function CandidaturesTable({ initial }: { initial: Row[] }) {
   async function saveDraft(row: Row): Promise<boolean> {
     const draft = drafts[row.id] ?? savedDraft(row);
     const body: Record<string, string | null> = { notes: draft.notes || null, contact: draft.contact || null, deadline: draft.deadline || null };
+    if (row.status === "acceptee") {
+      body.offer_salary = draft.salary || null;
+      body.offer_start = draft.start || null;
+    }
     // Date de candidature : envoyée seulement si elle change (elle ne peut pas être vidée).
     if (draft.applied && draft.applied !== savedDraft(row).applied) body.applied_at = draft.applied;
     const ok = await patch(row.id, body);
@@ -182,7 +205,15 @@ export function CandidaturesTable({ initial }: { initial: Row[] }) {
     const previous = row.status;
     // Envoyée après préparation : le serveur date la candidature d'aujourd'hui (départ des 14 jours).
     const dated = previous === "en_cours" && next === "envoyee" ? { applied_at: new Date().toISOString().slice(0, 10) } : {};
-    setRows((current) => current.map((item) => item.id === row.id ? { ...item, status: next, ...dated } : item));
+    // Entretien et offre restent comptés dans l'entonnoir, même si le statut change ensuite.
+    const reached = next === "entretien" || next === "acceptee" ? { reached_interview: 1 } : {};
+    const accepted = next === "acceptee" && previous !== "acceptee" ? { accepted_at: new Date().toISOString().slice(0, 19).replace("T", " ") } : {};
+    setRows((current) => current.map((item) => item.id === row.id ? { ...item, status: next, ...dated, ...reached, ...accepted } : item));
+    if (next === "acceptee" && previous !== "acceptee") {
+      setHighlightId(row.id);
+      window.setTimeout(() => setHighlightId((id) => (id === row.id ? null : id)), 6000);
+      setNotice(`Bravo ! L'offre de ${rowCompany(row)} rejoint ta vitrine. Note le salaire et la date de début dans sa fiche.`);
+    }
     if (!await patch(row.id, { status: next })) setRows((current) => current.map((item) => item.id === row.id ? { ...item, status: previous } : item));
   }
 
@@ -252,6 +283,7 @@ export function CandidaturesTable({ initial }: { initial: Row[] }) {
 
   return (
     <div>
+      <TrackerSummary rows={rows} goal={goal} onGoal={saveGoal} highlightId={highlightId} onOpen={openRow} />
       <nav aria-label="Étapes des candidatures" className="mb-5 flex gap-2 overflow-x-auto pb-2 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0 lg:grid-cols-6">
         {STAGES.map((stage) => {
           const active = statusFilter === stage.id;
@@ -471,6 +503,16 @@ function CandidatureEditor({ row, layout, draft, dirty, onDraft, onReset, onSave
         <label className="text-small font-semibold">Contact
           <input type="text" value={draft.contact} onChange={(event) => onDraft({ contact: event.target.value })} placeholder="Nom ou adresse email" className={fieldClass} />
         </label>
+        {row.status === "acceptee" && (
+          <>
+            <label className="text-small font-semibold">Salaire de l'offre
+              <input type="text" value={draft.salary} onChange={(event) => onDraft({ salary: event.target.value })} placeholder="Ex. 48 k€ brut / an" className={fieldClass} />
+            </label>
+            <label className="text-small font-semibold">Date de début
+              <input type="date" value={draft.start} onChange={(event) => onDraft({ start: event.target.value })} className={fieldClass} />
+            </label>
+          </>
+        )}
         <label className={cn("text-small font-semibold", layout === "row" ? "col-span-4" : "sm:col-span-2")}>Notes
           <textarea value={draft.notes} onChange={(event) => onDraft({ notes: event.target.value })} rows={3} placeholder="Prochaine étape, échange, relance…" className="mt-1.5 w-full rounded-md border border-border bg-bg px-3 py-2 font-normal focus:border-accent focus:outline-none" />
         </label>

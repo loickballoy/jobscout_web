@@ -36,6 +36,11 @@ export async function PATCH(req: NextRequest) {
     }
     patch.applied_at = `${patch.applied_at} 12:00:00`;
   }
+  // Vitrine : date de début AAAA-MM-JJ (ou vide), salaire en texte libre borné.
+  if (patch.offer_start != null && patch.offer_start !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(String(patch.offer_start))) {
+    return NextResponse.json({ error: "date de début invalide (AAAA-MM-JJ)" }, { status: 400 });
+  }
+  if (patch.offer_salary != null) patch.offer_salary = String(patch.offer_salary).slice(0, 120);
   updateCandidature(Number(id), patch);
   return NextResponse.json({ ok: true });
 }
