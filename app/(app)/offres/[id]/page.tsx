@@ -11,6 +11,9 @@ import { ActionsPanel } from "./actions";
 import { formatRelativeDate, scoreColor } from "@/lib/utils";
 import { CONTRACT_LABELS } from "@/lib/contracts";
 import { SOURCES_META } from "@/lib/sources-meta";
+import { isServerMode } from "@/lib/server-mode";
+import { getCvTemplate } from "@/lib/cvtemplate/store";
+import { pickCluster } from "@/lib/cvtemplate/select";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +21,9 @@ export default async function OffreDetailPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const offre = getOffre(Number(id));
   if (!offre) notFound();
+  const cvTemplate = getCvTemplate();
+  const probable = cvTemplate ? pickCluster(cvTemplate, offre) : null;
+  const templateCluster = probable ? { id: probable.id, name: probable.name } : null;
 
   const docs = listDocuments({ offreId: offre.id });
   const cvPdf = docs.find((d) => d.type === "cv" && d.format === "pdf") ?? null;
@@ -85,6 +91,8 @@ export default async function OffreDetailPage({ params }: { params: Promise<{ id
             initial={{ cv_pdf_id: cvPdf?.id ?? null, cv_docx_id: cvDocx?.id ?? null, lm_pdf_id: lmPdf?.id ?? null, lm_docx_id: lmDocx?.id ?? null, msg_id: msgDoc?.id ?? null }}
             initialTrackingStatus={existingApplication?.status ?? null}
             initialFolder={docs.length > 0 ? offreFolderPath(offre.id, offre.company, offre.title) : null}
+            canOpenFolder={!isServerMode()}
+            templateCluster={templateCluster}
           />
           {offre.score_breakdown && (
             <section aria-labelledby="score-title" className="glass-panel p-5">

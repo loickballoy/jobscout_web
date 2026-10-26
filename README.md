@@ -59,6 +59,10 @@ L'app démarre sur http://127.0.0.1:3000 (écoute limitée à la machine locale,
 
 **Messages npm normaux** : `npm warn deprecated node-domexception`, « packages are looking for funding », et, avec npm récent, le script d'installation de `tesseract.js` ignoré (il n'affiche qu'un appel aux dons). `npm audit --omit=dev`, qui ne regarde que ce qui tourne réellement, doit afficher `found 0 vulnerabilities` (le PostCSS embarqué par Next.js est forcé en version corrigée via `overrides`). `npm audit` complet signale des failles dans des outils de développement (Tailwind CSS et ses dépendances), sans effet sur l'application. **Ne lancez jamais `npm audit fix --force`** : il installerait Tailwind CSS 4, incompatible.
 
+## Serveur auto-hébergé (Docker)
+
+`docker compose up -d --build` lance JobScout en permanence sur un serveur (homelab, Traefik, Tailscale) : écoute sur `0.0.0.0`, connexion par mot de passe (`JOBSCOUT_PASSWORD`), noms d'hôte autorisés (`JOBSCOUT_ALLOWED_HOSTS`), scan automatique quotidien (`JOBSCOUT_DAILY_SCAN=HH:MM`). Pas à pas : [DEPLOY-HOMELAB.md](DEPLOY-HOMELAB.md).
+
 ## Paquet Windows
 
 `npm run package` produit `installer/output/JobScout_Setup_v<version>.exe` : un installeur autonome (Node 22 LTS embarqué, aucune dépendance sur la machine cible), avec launcher natif, données sous `%LOCALAPPDATA%\JobScout` et contrôle anti-fuite de données personnelles bloquant. Voir [`installer/README.md`](installer/README.md).
@@ -106,6 +110,14 @@ Page Offres › « Définir ma ville » : choisissez votre ville de référence 
 ## Extraction du CV
 
 Cascade selon le type de fichier : PDF (`pdf-parse` ou `pdfjs-dist` multi-colonnes, meilleur retenu), DOCX (`mammoth`), image (`tesseract.js` FR+EN), TXT. Les modèles de reconnaissance d'image (FR, EN) sont téléchargés une fois depuis `cdn.jsdelivr.net`. Puis extraction structurée par le fournisseur d'IA choisi (appel d'outil forcé, ou réponse JSON contrainte selon le fournisseur), validation Zod, score de confiance et **garde-fou anti-hallucination** (suppression des entreprises et compétences non ancrées dans le profil).
+
+## Modèle de CV maître (facultatif)
+
+Page **Modèle CV** : un CV « maître » en JSON (clusters de postes, banque de puces étiquetées, blocs de compétences, FR et EN). S'il existe, chaque CV est **assemblé** à partir de vos textes au lieu d'être rédigé : l'IA (ou, sans clé, un choix par mots-clés) choisit le cluster, l'intitulé exact de l'offre, les puces et jusqu'à 5 mots-clés de l'annonce déjà présents dans vos compétences ; le code vérifie chaque choix (une seule version par fait, limites par entrée). La lettre de motivation ne s'appuie que sur les faits de ce CV. Les emplacements non remplis (`[N]`, `[mois]`) sont signalés à chaque génération. Un fichier `cv-template.json` déposé dans le dossier de données est importé au premier accès (`lib/cvtemplate`).
+
+## Zones de recherche
+
+Profil › **Zones de recherche** : Paris et Île-de-France, Lyon et agglomération, Suisse romande. Le scan interroge ces lieux (France Travail par département, LinkedIn et Talent.com par ville) et la page Offres s'ouvre filtrée sur « Mes zones » (`lib/zones.ts`).
 
 ## Génération de documents
 
