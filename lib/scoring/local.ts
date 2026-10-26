@@ -1,6 +1,8 @@
 import "server-only";
 import type { ProfileFull, Language } from "@/lib/cv/types";
 import { classifyContract, type ContractCategory } from "@/lib/contracts";
+import { classifySeniority } from "@/lib/seniority";
+import { getJuniorOnly } from "@/lib/seniority-store";
 
 export type ScoreResult = {
   score: number;
@@ -261,9 +263,14 @@ export type ScoringInput = {
   contract_type?: string | null;
 };
 
+/** Écart de score selon le niveau demandé, quand l'utilisateur ne vise que des postes junior. */
+const SENIORITY_DELTA = { junior: 5, unknown: 0, mid: -10, senior: -25 } as const;
+
 export function scoreOffreLocal(
   profile: ProfileFull,
-  offre: ScoringInput
+  offre: ScoringInput,
+  // Lu dans les réglages par défaut : les appelants (scan, re-score, profils) n'ont rien à passer.
+  opts: { juniorOnly?: boolean } = { juniorOnly: getJuniorOnly() }
 ): ScoreResult {
   const sector = scoreSector(profile.sectors, offre.title, offre.description_text);
   const skills = scoreSkills(profile, offre.description_text);
@@ -283,9 +290,12 @@ export function scoreOffreLocal(
   const durationBonus = (duration.score / 100) * 5;   // up to +5
   // Contrat : centré sur 50 → contrat recherché (preferred_contracts) +10, inconnu 0, identifié mais non recherché −6
   const contractDelta = ((contract.score - 50) / 50) * 10;
+  // Niveau : un jeune diplômé n'a rien à attendre d'un poste senior bien noté sur les compétences.
+  const seniority = opts.juniorOnly ? classifySeniority(offre.title, offre.description_text) : null;
+  const seniorityDelta = seniority ? SENIORITY_DELTA[seniority.level] : 0;
 
   const finalScore = Math.round(
-    Math.max(0, Math.min(100, base + languageBonus + durationBonus + contractDelta))
+    Math.max(0, Math.min(100, base + languageBonus + durationBonus + contractDelta + seniorityDelta))
   );
 
   // Build human-readable reason
@@ -305,6 +315,9 @@ export function scoreOffreLocal(
     parts.push(`${contract.category.toUpperCase()} recherché`);
   else if (contract.score === 20)
     parts.push(`${contract.category} (non ciblé)`);
+  if (seniority?.level === "senior") parts.push(seniority.years !== null ? `poste senior (${seniority.years} ans+)` : "poste senior");
+  else if (seniority?.level === "mid") parts.push(`${seniority.years} ans d'expérience demandés`);
+  else if (seniority?.level === "junior") parts.push("poste junior");
   const reason = parts.length ? parts.join(" · ") : "Faible recouvrement avec votre profil";
 
   return {
@@ -325,5 +338,6 @@ export function scoreOffresLocal(
   profile: ProfileFull,
   offres: ScoringInput[]
 ): ScoreResult[] {
-  return offres.map((o) => scoreOffreLocal(profile, o));
+  const opts = { juniorOnly: getJuniorOnly() };
+  return offres.map((o) => scoreOffreLocal(profile, o, opts));
 }

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, ArrowUpRight, Briefcase, CalendarDays, ChevronDown, MapPin, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 import { Chip } from "@/components/ui/chip";
 import { Badge } from "@/components/ui/badge";
+import { seniorityLabel } from "@/lib/seniority";
 import { cn, formatRelativeDate, scoreColor } from "@/lib/utils";
 import type { OffreSummary, OffersSearch, OffersSort } from "@/lib/db/offres";
 import { CONTRACT_LABELS, CONTRACT_ORDER, type ContractCategory } from "@/lib/contracts";
@@ -35,10 +36,13 @@ export function OffresList({
   initialMinScore = 0,
   homeSuggestion = null,
   initialZonesOnly = false,
+  initialJuniorOnly = false,
 }: {
   initialResult: OffersSearch;
   /** Zones de recherche configurées : la liste démarre filtrée sur elles. */
   initialZonesOnly?: boolean;
+  /** « Postes junior uniquement » : la liste démarre sans les postes seniors. */
+  initialJuniorOnly?: boolean;
   initialVieOnly?: boolean;
   initialMinScore?: number;
   /** Commune proposée d'après le lieu du profil, tant qu'aucune ville de référence n'est choisie. */
@@ -58,6 +62,7 @@ export function OffresList({
   const [radius, setRadius] = useState<number | null>(null);
   const [includeUnlocated, setIncludeUnlocated] = useState(false);
   const [zonesOnly, setZonesOnly] = useState(initialZonesOnly);
+  const [juniorOnly, setJuniorOnly] = useState(initialJuniorOnly);
   const [result, setResult] = useState(initialResult);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -70,8 +75,8 @@ export function OffresList({
   const initialVieRef = useRef(initialVieOnly);
   const contractKey = [...contracts].sort().join(",");
   const vieFilter = contracts.has("vie");
-  const hasFilters = !!query || !!source || !!country || contracts.size > 0 || minScore || radius !== null || zonesOnly;
-  const activeFilterCount = Number(!!source) + Number(!!country) + contracts.size + Number(minScore) + Number(radius !== null) + Number(zonesOnly);
+  const hasFilters = !!query || !!source || !!country || contracts.size > 0 || minScore || radius !== null || zonesOnly || juniorOnly;
+  const activeFilterCount = Number(!!source) + Number(!!country) + contracts.size + Number(minScore) + Number(radius !== null) + Number(zonesOnly) + Number(juniorOnly);
   const distanceFacets = result.facets.distance;
   const home = distanceFacets.home;
   const { countries, sources, contractCounts } = result.facets;
@@ -128,6 +133,7 @@ export function OffresList({
     if (radius !== null) params.set("radius", String(radius));
     if (radius !== null && includeUnlocated) params.set("unlocated", "1");
     if (zonesOnly) params.set("zones", "1");
+    if (juniorOnly) params.set("junior", "1");
     setLoading(true);
     setError(false);
     const timer = window.setTimeout(async () => {
@@ -148,10 +154,10 @@ export function OffresList({
       }
     }, page > 1 ? 0 : query ? 250 : 0);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [query, source, country, contractKey, minScore, scoreThreshold, sortBy, radius, includeUnlocated, zonesOnly, page, refreshKey]);
+  }, [query, source, country, contractKey, minScore, scoreThreshold, sortBy, radius, includeUnlocated, zonesOnly, juniorOnly, page, refreshKey]);
 
   function reset() {
-    setQuery(""); setSource(""); setCountry(""); setContracts(new Set()); setMinScore(false); setRadius(null); setIncludeUnlocated(false); setZonesOnly(false); setSelectedId(null); setFiltersExpanded(false); setPage(1);
+    setQuery(""); setSource(""); setCountry(""); setContracts(new Set()); setMinScore(false); setRadius(null); setIncludeUnlocated(false); setZonesOnly(false); setJuniorOnly(false); setSelectedId(null); setFiltersExpanded(false); setPage(1);
   }
 
   useEffect(() => {
@@ -216,6 +222,9 @@ export function OffresList({
             </Chip>
           ))}
           <Chip active={minScore} onClick={() => { setMinScore(!minScore); setPage(1); }}>Score {scoreThreshold}+</Chip>
+          <Chip active={juniorOnly} onClick={() => { setJuniorOnly(!juniorOnly); setPage(1); }}>
+            Junior <span className="font-normal tabular-nums">{numberFormat.format(result.facets.junior.count)}</span>
+          </Chip>
           {result.facets.zones.labels.length > 0 && (
             <Chip active={zonesOnly} onClick={() => { setZonesOnly(!zonesOnly); setPage(1); }}>
               Mes zones <span className="font-normal tabular-nums">{numberFormat.format(result.facets.zones.count)}</span>
@@ -341,6 +350,11 @@ function OfferRowContent({ offer }: { offer: OffreSummary }) {
           {offer.posted_at && <span className="mr-1 text-caption text-textSecondary">{formatRelativeDate(offer.posted_at)}</span>}
           <Badge>{sourceLabels[offer.source] ?? offer.source}</Badge>
           {offer.contract_category !== "autre" && <Badge variant={offer.contract_category === "vie" ? "info" : "default"}>{CONTRACT_LABELS[offer.contract_category]}</Badge>}
+          {seniorityLabel({ level: offer.seniority, years: offer.seniority_years }) && (
+            <Badge variant={offer.seniority === "junior" ? "success" : offer.seniority === "senior" ? "danger" : "warning"}>
+              {seniorityLabel({ level: offer.seniority, years: offer.seniority_years })}
+            </Badge>
+          )}
           {(offer.has_cv || offer.has_lm) && <Badge variant="success">Dossier prêt</Badge>}
           {offer.description_status === "failed" && <Badge variant="warning">Annonce partielle</Badge>}
         </span>

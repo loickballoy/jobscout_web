@@ -64,6 +64,8 @@ export const linkedinScraper: Scraper = {
       const cards: ListingCard[] = [];
 
       // Zones choisies (Île-de-France, Lyon, Genève…) à la place du pays entier.
+      // Postes junior uniquement : niveaux LinkedIn « Entry level » (2) et « Associate » (3).
+      const experienceFilter = criteria.juniorOnly ? "&f_E=2%2C3" : "";
       const countries = searchLocations(criteria.countries, criteria.zones ?? [], "linkedin", nameToCode).map((l) => l.location);
       // 2 pages max par combinaison secteur×pays : avec une liste de pays large
       // (ex. francophonie), on couvre chaque pays au lieu d'épuiser le budget
@@ -75,7 +77,7 @@ export const linkedinScraper: Scraper = {
           for (let p = 0; p < 2 && cards.length < max; p++) {
             const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(
               sector
-            )}&location=${encodeURIComponent(country)}&start=${start}`;
+            )}&location=${encodeURIComponent(country)}&start=${start}${experienceFilter}`;
             let pageCards: ListingCard[] = [];
             try {
               await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });

@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
     // Zones choisies (Profil › Recherche), lues côté serveur ; ?zones=1 n'en garde que les offres.
     zones: getSearchZones(),
     zonesOnly: params.get("zones") === "1",
+    juniorOnly: params.get("junior") === "1",
     page: Number.isFinite(page) ? page : 1,
   });
   return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });

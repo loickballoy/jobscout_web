@@ -1,6 +1,7 @@
 import "server-only";
 import { geoGeneration, haversineKm, resolveOfferLocation, type GeoPrecision } from "@/lib/geo";
 import { inZones, type Zone } from "@/lib/zones";
+import { classifySeniority, juniorFriendly, type Seniority } from "@/lib/seniority";
 import { depOfInsee, roundKm } from "@/lib/distance/format";
 import { getDb, asJson, parseJson } from "./index";
 import type { ScrapedOffre } from "@/lib/scrapers/base";
@@ -66,6 +67,9 @@ export type OffreSummary = Pick<
   /** Lieu reconnu (« Saint-Denis (93) », « Bruxelles, Belgique »), ou null. */
   geo_label: string | null;
   geo_precision: GeoPrecision | null;
+  /** Niveau demandé (lib/seniority) et années d'expérience exigées, si l'offre les dit. */
+  seniority: Seniority;
+  seniority_years: number | null;
 };
 
 export type OffersSort = "smart" | "newest" | "oldest" | "score" | "distance";
@@ -97,7 +101,7 @@ export type OffersSearch = {
   offers: OffreSummary[];
   total: number;
   pageSize: number;
-  facets: BaseFacets & { distance: DistanceFacets; zones: { labels: string[]; count: number } };
+  facets: BaseFacets & { distance: DistanceFacets; zones: { labels: string[]; count: number }; junior: { count: number } };
 };
 
 const OFFER_PAGE_SIZE = 24;
@@ -224,6 +228,10 @@ function buildOffresCache(fingerprint: string): OffresCache {
       geo_lat: geo.lat, geo_lng: geo.lng, geo_code: geo.lat !== null ? geo.code ?? null : null,
       geo_label: geo.label, geo_precision: geo.precision,
       geo_unlocated_fr: geo.lat === null && (geo.country ? geo.country === "FR" : countryKey === "" || countryKey === "france"),
+      ...(() => {
+        const r = classifySeniority(row.title, row.head ?? "");
+        return { seniority: r.level, seniority_years: r.years };
+      })(),
     };
     byId.set(offer.id, offer);
     smart.push(offer);
@@ -316,6 +324,8 @@ export function searchOffres(opts: {
   zones?: Zone[];
   /** Ne garder que les offres situées dans ces zones. */
   zonesOnly?: boolean;
+  /** Ne garder que les postes accessibles à un jeune diplômé (junior ou niveau non précisé). */
+  juniorOnly?: boolean;
   page?: number;
 } = {}): OffersSearch {
   const cache = getOffresCache();
@@ -323,6 +333,8 @@ export function searchOffres(opts: {
   const haystacks = query ? getHaystacks(cache) : null;
   const contracts = new Set(opts.contracts ?? []);
   const minScore = opts.minScore === true ? 60 : typeof opts.minScore === "number" ? opts.minScore : 0;
+  // Postes junior : comptés sur les offres filtrées, retirés sur demande (avant les zones et la distance).
+  let juniorCount = 0;
   const filtered = cache.smart.filter((row) => {
     if (haystacks && !(haystacks.get(row.id) ?? "").includes(query)) return false;
     if (opts.source && row.source !== opts.source) return false;
@@ -330,7 +342,9 @@ export function searchOffres(opts: {
     if (contracts.size && !contracts.has(row.contract_category)) return false;
     if (minScore > 0 && (row.score ?? 0) < minScore) return false;
     if (opts.vieOnly && row.contract_category !== "vie") return false;
-    return true;
+    const friendly = juniorFriendly(row.seniority);
+    if (friendly) juniorCount++;
+    return !opts.juniorOnly || friendly;
   });
 
   // Zones de recherche : comptées sur les offres filtrées, appliquées sur demande.
@@ -427,6 +441,7 @@ export function searchOffres(opts: {
       same_city: sameCity.has(row.id),
       same_dept: sameDept.has(row.id),
       geo_label: row.geo_label, geo_precision: row.geo_precision,
+      seniority: row.seniority, seniority_years: row.seniority_years,
     })),
     total: inRadius.length,
     pageSize: OFFER_PAGE_SIZE,
@@ -438,6 +453,7 @@ export function searchOffres(opts: {
         counts, located, unlocated: home ? unlocatedFr : 0,
       },
       zones: { labels: zones.map((z) => z.label), count: zoneCount },
+      junior: { count: juniorCount },
     },
   };
 }

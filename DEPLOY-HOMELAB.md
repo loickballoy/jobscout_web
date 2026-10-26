@@ -92,9 +92,13 @@ Tailscale name, with a real HTTPS certificate, visible only on your tailnet.
 4. **Profil › Zones de recherche**: select *Paris et Île-de-France*, *Lyon et agglomération*
    and *Suisse romande*. The scan then searches those places instead of the
    whole country, and the Offres page opens filtered on **Mes zones**.
-5. **Modèle CV › À compléter avant d'envoyer**: fill the `[N]` and `[mois]`
+5. **Profil › Niveau de poste**: turn on *Postes junior uniquement*. The Offres page
+   then opens filtered on **Junior** (junior offers plus offers that state no level;
+   senior offers and offers asking for 3+ years are hidden), senior offers lose
+   25 points in the score, and LinkedIn is searched on *Entry level* and *Associate*.
+6. **Modèle CV › À compléter avant d'envoyer**: fill the `[N]` and `[mois]`
    placeholders. Until they are filled, every generated CV lists them as warnings.
-6. Click **Lancer un scan** once. After that, the daily scan runs every morning.
+7. Click **Lancer un scan** once. After that, the daily scan runs every morning.
 
 ## Daily routine
 
