@@ -134,4 +134,7 @@ git pull && docker compose up -d --build
   `Resolve-DnsName` in PowerShell.
 - **Scan stuck at the start behind Traefik**: the scan streams its progress.
   Make sure no compression middleware is applied to this router.
+- **"unable to open database file"**: fixed at startup since this version (the
+  container hands `./data` to its user, UID 1000). With an older image:
+  `sudo chown -R 1000:1000 ./data`.
 - **Lighter image without LinkedIn**: set `WITH_LINKEDIN=0` in `.env`, then rebuild.
