@@ -78,6 +78,21 @@ function scoreSector(
   return { score, matched };
 }
 
+/**
+ * Formes d'une compétence : « IA générative (Generative AI) » → « IA générative »,
+ * « Generative AI » ; « IA explicable (XAI, LIME, SHAP) » → les quatre. Le nom
+ * entier n'apparaît presque jamais tel quel dans une annonce.
+ */
+export function skillAliases(name: string): string[] {
+  const m = /^(.*?)\s*\(([^()]*)\)\s*$/.exec(name.trim());
+  if (!m || !m[1].trim()) return [name.trim()];
+  return [m[1].trim(), ...m[2].split(",").map((s) => s.trim())].filter((s) => s.length >= 2);
+}
+
+function skillMatches(descNorm: string, name: string): boolean {
+  return skillAliases(name).some((alias) => containsTerm(descNorm, alias));
+}
+
 function scoreSkills(
   profile: ProfileFull,
   description: string
@@ -93,14 +108,14 @@ function scoreSkills(
 
   let weightedHits = 0;
   for (const s of anchoredSkills) {
-    if (containsTerm(descNorm, s.name)) {
+    if (skillMatches(descNorm, s.name)) {
       weightedHits += 2;
       matched.push(s.name);
       anchoredMatched.push(s.name);
     }
   }
   for (const s of listedSkills) {
-    if (containsTerm(descNorm, s.name)) {
+    if (skillMatches(descNorm, s.name)) {
       weightedHits += 1;
       matched.push(s.name);
     }

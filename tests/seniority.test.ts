@@ -84,3 +84,19 @@ describe("réglage « postes junior uniquement »", () => {
     expect(all.offers.find((o) => o.id === junior)?.seniority).toBe("junior");
   });
 });
+
+describe("compétences écrites avec parenthèses", () => {
+  it("chaque forme compte : nom principal ou variantes entre parenthèses", async () => {
+    const { skillAliases } = await import("@/lib/scoring/local");
+    expect(skillAliases("IA générative (Generative AI)")).toEqual(["IA générative", "Generative AI"]);
+    expect(skillAliases("IA explicable (XAI, LIME, SHAP)")).toEqual(["IA explicable", "XAI", "LIME", "SHAP"]);
+    expect(skillAliases("C/C++")).toEqual(["C/C++"]);
+    expect(skillAliases("Python")).toEqual(["Python"]);
+    const withAlias = { ...profile, skills: [{ id: 1, profile_id: 1, name: "IA générative (Generative AI)", category: null, level: null, evidence_experience_ids: [] }] };
+    const offer = { title: "AI Engineer", company: "X", country: "Suisse", description_text: "Experience with Generative AI products." };
+    const plain = { ...withAlias, skills: [{ ...withAlias.skills[0], name: "Rust" }] };
+    expect(scoreOffreLocal(withAlias as never, offer, { juniorOnly: false }).breakdown.skills).toBeGreaterThan(
+      scoreOffreLocal(plain as never, offer, { juniorOnly: false }).breakdown.skills
+    );
+  });
+});

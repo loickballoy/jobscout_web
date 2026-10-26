@@ -25,6 +25,12 @@ export function getDb(): DatabaseSync {
       `ALTER TABLE profile ADD COLUMN preferred_contracts TEXT NOT NULL DEFAULT '["cdi","cdd"]'`
     );
   } catch {}
+  // Vitrine des offres (page Candidatures) : salaire et date de début de l'offre acceptée.
+  for (const column of ["offer_salary TEXT", "offer_start TEXT"]) {
+    try {
+      db.exec(`ALTER TABLE candidatures ADD COLUMN ${column}`);
+    } catch {}
+  }
 
   _db = db;
   return db;
