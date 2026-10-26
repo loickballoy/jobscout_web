@@ -2,6 +2,7 @@ import "server-only";
 import { runScan } from "@/lib/scan/orchestrator";
 import { getProfile } from "@/lib/db/queries";
 import { getDb } from "@/lib/db";
+import { archiveStaleCandidatures } from "@/lib/db/candidatures";
 
 /**
  * Scan quotidien automatique, pour un JobScout qui tourne en permanence
@@ -48,6 +49,8 @@ export async function runDailyScan(): Promise<void> {
     console.log("[daily-scan] un scan est déjà en cours, scan quotidien ignoré.");
     return;
   }
+  const archived = archiveStaleCandidatures();
+  if (archived) console.log(`[daily-scan] ${archived} candidature(s) archivée(s) faute de réponse`);
   state.running = true;
   const t0 = Date.now();
   console.log("[daily-scan] démarrage");

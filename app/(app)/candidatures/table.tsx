@@ -15,6 +15,7 @@ const STATUS_OPTIONS: { id: string; label: string; variant: BadgeVariant }[] = [
   { id: "entretien", label: "Entretien", variant: "warning" },
   { id: "acceptee", label: "Acceptée", variant: "success" },
   { id: "refusee", label: "Refusée", variant: "danger" },
+  { id: "archivee", label: "Archivée", variant: "default" },
 ];
 
 const STAGES = [
@@ -23,22 +24,31 @@ const STAGES = [
   { id: "envoyee", label: "Envoyées" },
   { id: "entretien", label: "Entretiens" },
   { id: "decisions", label: "Décisions" },
+  { id: "archivee", label: "Archivées" },
 ] as const;
 const EMPTY_STAGE_COPY: Record<string, { title: string; description: string }> = {
   en_cours: { title: "Aucune candidature en préparation", description: "Depuis une offre, ajoutez-la au suivi pour préparer votre dossier." },
   envoyee: { title: "Aucune candidature envoyée", description: "Après avoir postulé sur le site de l'annonce, passez son statut à « Envoyée »." },
   entretien: { title: "Aucun entretien pour le moment", description: "Les entretiens apparaîtront ici lorsque vous changerez le statut d'une candidature." },
   decisions: { title: "Aucune décision enregistrée", description: "Les candidatures acceptées ou refusées apparaîtront ici." },
+  archivee: { title: "Aucune candidature archivée", description: "Une candidature « Envoyée » sans réponse 14 jours après la date de candidature est archivée automatiquement." },
 };
 
 const UNSAVED_MESSAGE = "Des modifications du suivi ne sont pas enregistrées. Quitter la page sans les enregistrer ?";
 
 /** Brouillon des champs à enregistrement explicite (le statut, lui, part dès qu'on le change). */
-type Draft = { notes: string; contact: string; deadline: string };
+type Draft = { notes: string; contact: string; deadline: string; applied: string };
 type Row = CandidatureWithOffre;
 
+/** « Toutes » = les candidatures actives : les archivées ont leur propre onglet. */
 function matchesStage(status: string, stage: string): boolean {
-  return !stage || (stage === "decisions" ? status === "acceptee" || status === "refusee" : status === stage);
+  if (!stage) return status !== "archivee";
+  return stage === "decisions" ? status === "acceptee" || status === "refusee" : status === stage;
+}
+
+/** Date affichée : de candidature une fois envoyée, d'ajout tant que le dossier est en préparation. */
+function dateLabel(row: { status: string; applied_at: string | null }): string {
+  return `${row.status === "en_cours" ? "ajoutée" : "postulée"} le ${displayDate(row.applied_at)}`;
 }
 
 function statusMeta(status: string) {
@@ -68,11 +78,11 @@ function applyUrl(row: Row): string | null {
 }
 
 function savedDraft(row: Row): Draft {
-  return { notes: row.notes ?? "", contact: row.contact ?? "", deadline: row.deadline ?? "" };
+  return { notes: row.notes ?? "", contact: row.contact ?? "", deadline: row.deadline ?? "", applied: row.applied_at?.slice(0, 10) ?? "" };
 }
 
 function sameDraft(a: Draft, b: Draft): boolean {
-  return a.notes === b.notes && a.contact === b.contact && a.deadline === b.deadline;
+  return a.notes === b.notes && a.contact === b.contact && a.deadline === b.deadline && a.applied === b.applied;
 }
 
 export function CandidaturesTable({ initial }: { initial: Row[] }) {
@@ -160,14 +170,19 @@ export function CandidaturesTable({ initial }: { initial: Row[] }) {
 
   async function saveDraft(row: Row): Promise<boolean> {
     const draft = drafts[row.id] ?? savedDraft(row);
-    const ok = await patch(row.id, { notes: draft.notes || null, contact: draft.contact || null, deadline: draft.deadline || null });
+    const body: Record<string, string | null> = { notes: draft.notes || null, contact: draft.contact || null, deadline: draft.deadline || null };
+    // Date de candidature : envoyée seulement si elle change (elle ne peut pas être vidée).
+    if (draft.applied && draft.applied !== savedDraft(row).applied) body.applied_at = draft.applied;
+    const ok = await patch(row.id, body);
     if (ok) dropDraft(row.id);
     return ok;
   }
 
   async function changeStatus(row: Row, next: string) {
     const previous = row.status;
-    setRows((current) => current.map((item) => item.id === row.id ? { ...item, status: next } : item));
+    // Envoyée après préparation : le serveur date la candidature d'aujourd'hui (départ des 14 jours).
+    const dated = previous === "en_cours" && next === "envoyee" ? { applied_at: new Date().toISOString().slice(0, 10) } : {};
+    setRows((current) => current.map((item) => item.id === row.id ? { ...item, status: next, ...dated } : item));
     if (!await patch(row.id, { status: next })) setRows((current) => current.map((item) => item.id === row.id ? { ...item, status: previous } : item));
   }
 
@@ -203,10 +218,15 @@ export function CandidaturesTable({ initial }: { initial: Row[] }) {
       form.append("file", file);
       const res = await fetch("/api/candidatures/import", { method: "POST", body: form });
       if (!res.ok) throw new Error("Import impossible. Vérifiez que le fichier contient un tableau Excel valide.");
-      const result = await res.json().catch(() => ({})) as { imported?: number };
+      const result = await res.json().catch(() => ({})) as { imported?: number; skipped?: number; archived?: number };
       const fresh = await fetch("/api/candidatures").then((response) => response.json());
       if (Array.isArray(fresh.candidatures)) setRows(fresh.candidatures);
-      if (typeof result.imported === "number") setNotice(`${result.imported} candidature${result.imported > 1 ? "s importées" : " importée"}.`);
+      if (typeof result.imported === "number") {
+        const parts = [`${result.imported} candidature${result.imported > 1 ? "s importées" : " importée"}`];
+        if (result.skipped) parts.push(`${result.skipped} déjà présente${result.skipped > 1 ? "s" : ""}, ignorée${result.skipped > 1 ? "s" : ""}`);
+        if (result.archived) parts.push(`${result.archived} archivée${result.archived > 1 ? "s" : ""} (sans réponse depuis 14 jours)`);
+        setNotice(`${parts.join(" · ")}.`);
+      }
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Erreur réseau.");
@@ -232,7 +252,7 @@ export function CandidaturesTable({ initial }: { initial: Row[] }) {
 
   return (
     <div>
-      <nav aria-label="Étapes des candidatures" className="mb-5 flex gap-2 overflow-x-auto pb-2 sm:grid sm:grid-cols-5 sm:overflow-visible sm:pb-0">
+      <nav aria-label="Étapes des candidatures" className="mb-5 flex gap-2 overflow-x-auto pb-2 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0 lg:grid-cols-6">
         {STAGES.map((stage) => {
           const active = statusFilter === stage.id;
           const count = rows.filter((row) => matchesStage(row.status, stage.id)).length;
@@ -315,7 +335,7 @@ export function CandidaturesTable({ initial }: { initial: Row[] }) {
                           {row.offre_id
                             ? <Link href={`/offres/${row.offre_id}`} className="line-clamp-2 font-semibold leading-snug hover:text-accent" title={rowTitle(row)}>{rowTitle(row)}</Link>
                             : <span className="line-clamp-2 font-semibold leading-snug" title={rowTitle(row)}>{rowTitle(row)}</span>}
-                          <p className="mt-0.5 truncate text-caption text-textSecondary">{rowCompany(row)}{country ? ` · ${country}` : ""} · ajoutée le {displayDate(row.applied_at)}</p>
+                          <p className="mt-0.5 truncate text-caption text-textSecondary">{rowCompany(row)}{country ? ` · ${country}` : ""} · {dateLabel(row)}</p>
                         </td>
                         <td className="px-3 py-3"><Badge variant={meta.variant}>{meta.label}</Badge></td>
                         <td className="whitespace-nowrap px-3 py-3">{row.deadline ? displayDate(row.deadline) : <span className="text-textSecondary">—</span>}</td>
@@ -375,7 +395,7 @@ function CandidatureCard({ row, dirty, editor }: { row: Row; dirty: boolean; edi
         <div className="min-w-0 flex-1">
           <p className="mb-1 text-small font-semibold text-textSecondary">{rowCompany(row)}</p>
           {row.offre_id ? <Link href={`/offres/${row.offre_id}`} className="font-display text-[21px] font-semibold leading-tight hover:text-accent">{rowTitle(row)}</Link> : <h3 className="font-display text-[21px] font-semibold leading-tight">{rowTitle(row)}</h3>}
-          <p className="mt-2 text-small text-textSecondary">Ajoutée le {displayDate(row.applied_at)}{country ? ` · ${country}` : ""}</p>
+          <p className="mt-2 text-small text-textSecondary">{dateLabel(row).replace(/^./, (c) => c.toUpperCase())}{country ? ` · ${country}` : ""}</p>
         </div>
         <Badge variant={meta.variant} className="mt-0.5">{meta.label}</Badge>
       </div>
@@ -436,11 +456,14 @@ function CandidatureEditor({ row, layout, draft, dirty, onDraft, onReset, onSave
 
   return (
     <div>
-      <div className={cn("grid gap-4 pt-4", layout === "row" ? "grid-cols-3" : "sm:grid-cols-2")}>
+      <div className={cn("grid gap-4 pt-4", layout === "row" ? "grid-cols-4" : "sm:grid-cols-2")}>
         <label className="text-small font-semibold">Statut
           <select value={row.status} onChange={(event) => onStatus(event.target.value)} className={fieldClass}>
             {STATUS_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
+        </label>
+        <label className="text-small font-semibold">Date de candidature
+          <input type="date" value={draft.applied} onChange={(event) => onDraft({ applied: event.target.value })} className={fieldClass} />
         </label>
         <label className="text-small font-semibold">Échéance
           <input type="date" value={draft.deadline} onChange={(event) => onDraft({ deadline: event.target.value })} className={fieldClass} />
@@ -448,7 +471,7 @@ function CandidatureEditor({ row, layout, draft, dirty, onDraft, onReset, onSave
         <label className="text-small font-semibold">Contact
           <input type="text" value={draft.contact} onChange={(event) => onDraft({ contact: event.target.value })} placeholder="Nom ou adresse email" className={fieldClass} />
         </label>
-        <label className={cn("text-small font-semibold", layout === "row" ? "col-span-3" : "sm:col-span-2")}>Notes
+        <label className={cn("text-small font-semibold", layout === "row" ? "col-span-4" : "sm:col-span-2")}>Notes
           <textarea value={draft.notes} onChange={(event) => onDraft({ notes: event.target.value })} rows={3} placeholder="Prochaine étape, échange, relance…" className="mt-1.5 w-full rounded-md border border-border bg-bg px-3 py-2 font-normal focus:border-accent focus:outline-none" />
         </label>
       </div>

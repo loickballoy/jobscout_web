@@ -123,6 +123,10 @@ Profil › **Zones de recherche** : Paris et Île-de-France, Lyon et agglomérat
 
 Profil › **Niveau de poste** › « Postes junior uniquement » : niveau de chaque offre déduit localement (intitulé « Senior », « Lead », « Junior » ; « 5 ans d'expérience », « 3+ years » ; champ « Débutant accepté » de France Travail), filtre « Junior » de la page Offres actif d'office, −25 au score des postes seniors (−10 pour 3 à 4 ans), recherche LinkedIn sur « Entry level » et « Associate » (`lib/seniority.ts`).
 
+## Suivi des candidatures
+
+Page **Candidatures** : statut, date de candidature (modifiable ; une candidature « En cours » passée à « Envoyée » prend la date du jour), échéance, contact, notes. Une candidature restée **« Envoyée » sans réponse 14 jours après sa date de candidature passe en « Archivée »** (onglet dédié, note datée), à chaque ouverture du suivi et au scan quotidien ; délai réglable par `JOBSCOUT_ARCHIVE_DAYS`. **Importer** accepte l'export de JobScout ou un tracker Excel personnel sur plusieurs feuilles (« Job Details », « Pre-Interview », « Interviews »…), fusionnées par entreprise et poste ; un réimport ne crée pas de doublon (`lib/excel/io.ts`).
+
 ## Génération de documents
 
 `data/documents/…` — CV et lettre en PDF **et** DOCX, avec une boucle de rétrécissement qui garantit une page A4. Langue détectée par offre (français, ou anglais si l'annonce est en anglais). Relecture automatique : orthographe, affirmations non étayées par le profil. Message court (V.I.E) réservé aux offres V.I.E.

@@ -18,6 +18,7 @@ const STATUS_META: Record<string, { label: string; variant: BadgeVariant }> = {
   entretien: { label: "Entretien", variant: "warning" },
   acceptee: { label: "Acceptée", variant: "success" },
   refusee: { label: "Refusée", variant: "danger" },
+  archivee: { label: "Archivée", variant: "default" },
 };
 
 const HIGH_SCORE = 70;

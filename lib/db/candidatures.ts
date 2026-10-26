@@ -28,10 +28,50 @@ export type CandidatureWithOffre = CandidatureRow & {
   offre_score: number | null;
 };
 
-export const STATUS = ["envoyee", "en_cours", "entretien", "refusee", "acceptee"] as const;
+export const STATUS = ["envoyee", "en_cours", "entretien", "refusee", "acceptee", "archivee"] as const;
 export type Status = (typeof STATUS)[number];
 
+/** Délai sans réponse après lequel une candidature « Envoyée » est archivée (JOBSCOUT_ARCHIVE_DAYS, défaut 14). */
+export function archiveAfterDays(): number {
+  const n = Number(process.env.JOBSCOUT_ARCHIVE_DAYS);
+  return Number.isInteger(n) && n > 0 ? n : 14;
+}
+
+/**
+ * Archive les candidatures restées « Envoyée » (aucune réponse enregistrée)
+ * plus de `days` jours après la date de candidature, avec une note datée.
+ * Appelé à chaque lecture du suivi et par le scan quotidien. Renvoie le nombre archivé.
+ */
+export function archiveStaleCandidatures(days = archiveAfterDays(), now = new Date()): number {
+  const today = now.toISOString().slice(0, 10);
+  const note = `Archivée automatiquement le ${today.split("-").reverse().join("/")} : sans réponse ${days} jours après la candidature.`;
+  const res = getDb()
+    .prepare(
+      `UPDATE candidatures
+       SET status = 'archivee',
+           notes = CASE WHEN notes IS NULL OR trim(notes) = '' THEN ? ELSE notes || char(10) || ? END
+       WHERE status = 'envoyee' AND date(applied_at) IS NOT NULL AND date(applied_at) <= date(?, ?)`
+    )
+    .run(note, note, today, `-${days} days`);
+  return Number(res.changes);
+}
+
+/** Candidature importée déjà présente (même entreprise, même poste, même date de candidature) ? */
+export function importedCandidatureExists(company: string | null, title: string | null, appliedAt: string | null): boolean {
+  const row = getDb()
+    .prepare(
+      `SELECT 1 FROM candidatures
+       WHERE offre_id IS NULL AND lower(trim(coalesce(ext_company, ''))) = lower(trim(?))
+         AND lower(trim(coalesce(ext_title, ''))) = lower(trim(?))
+         AND coalesce(date(applied_at), '') = coalesce(date(?), '')
+       LIMIT 1`
+    )
+    .get(company ?? "", title ?? "", appliedAt);
+  return Boolean(row);
+}
+
 export function listCandidatures(): CandidatureWithOffre[] {
+  archiveStaleCandidatures();
   // Titres et entreprises lus dans offres sans passer par lib/db/offres.ts : réparations
   // uniques des offres d'abord (page Candidatures, export, API), sans coût ensuite.
   ensureOffresRepaired();
@@ -107,12 +147,18 @@ export function createCandidature(args: {
 
 // Seules ces colonnes sont modifiables via l'API — empêche le mass-assignment
 // (injection de nom de colonne / écriture de champs non prévus).
-const UPDATABLE_COLUMNS = ["status", "notes", "contact", "deadline"] as const;
+const UPDATABLE_COLUMNS = ["status", "notes", "contact", "deadline", "applied_at"] as const;
 
 export function updateCandidature(
   id: number,
-  patch: Partial<{ status: Status; notes: string; contact: string; deadline: string }>
+  patch: Partial<{ status: Status; notes: string; contact: string; deadline: string; applied_at: string }>
 ) {
+  // Préparée (« En cours ») puis envoyée : la date de candidature devient aujourd'hui,
+  // sauf si l'appelant la fixe lui-même. C'est elle qui déclenche l'archivage à 14 jours.
+  if (patch.status === "envoyee" && !Object.prototype.hasOwnProperty.call(patch, "applied_at")) {
+    const current = getDb().prepare("SELECT status FROM candidatures WHERE id = ?").get(id) as { status: string } | undefined;
+    if (current?.status === "en_cours") patch = { ...patch, applied_at: sqlNow() };
+  }
   const fields: string[] = [];
   const params: any[] = [];
   for (const col of UPDATABLE_COLUMNS) {
@@ -124,6 +170,10 @@ export function updateCandidature(
   if (!fields.length) return;
   params.push(id);
   getDb().prepare(`UPDATE candidatures SET ${fields.join(", ")} WHERE id = ?`).run(...params);
+}
+
+function sqlNow(): string {
+  return new Date().toISOString().slice(0, 19).replace("T", " ");
 }
 
 export function deleteCandidature(id: number) {
