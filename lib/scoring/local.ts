@@ -4,6 +4,9 @@ import { classifyContract, type ContractCategory } from "@/lib/contracts";
 import { classifySeniority } from "@/lib/seniority";
 import { getJuniorOnly } from "@/lib/seniority-store";
 
+/** Version de la formule : changée, toutes les offres sont recalculées au démarrage (lib/scoring/rescore.ts). */
+export const SCORING_VERSION = "2";
+
 export type ScoreResult = {
   score: number;
   breakdown: {
@@ -89,45 +92,44 @@ export function skillAliases(name: string): string[] {
   return [m[1].trim(), ...m[2].split(",").map((s) => s.trim())].filter((s) => s.length >= 2);
 }
 
-function skillMatches(descNorm: string, name: string): boolean {
-  return skillAliases(name).some((alias) => containsTerm(descNorm, alias));
-}
+/** Poids d'une compétence trouvée : ancrée dans une expérience, simplement listée, présente dans l'intitulé. */
+const SKILL_WEIGHT = { anchored: 1.3, listed: 1, inTitle: 0.5 };
+/** Courbe saturante (poids 1) : 3 compétences ≈ 40, 6 ≈ 63, 10 ≈ 81, 14 ≈ 90. */
+const SKILL_SATURATION = 6;
 
+/**
+ * Compétences : nombre (pondéré) de compétences du profil citées par l'offre,
+ * sur une courbe saturante. Ne dépend PAS de la taille du profil : avant, le
+ * score était divisé par le nombre total de compétences, si bien qu'un profil
+ * riche (60 compétences) plafonnait vers 40/100 et que chaque compétence
+ * ajoutée faisait baisser toutes les offres.
+ */
 function scoreSkills(
   profile: ProfileFull,
-  description: string
+  description: string,
+  title = ""
 ): { score: number; matched: string[]; anchoredMatched: string[] } {
   if (!profile.skills.length) return { score: 30, matched: [], anchoredMatched: [] };
   const descNorm = normalize(description);
-
-  const anchoredSkills = profile.skills.filter((s) => s.evidence_experience_ids.length > 0);
-  const listedSkills = profile.skills.filter((s) => s.evidence_experience_ids.length === 0);
+  const titleNorm = normalize(title);
 
   const matched: string[] = [];
   const anchoredMatched: string[] = [];
-
-  let weightedHits = 0;
-  for (const s of anchoredSkills) {
-    if (skillMatches(descNorm, s.name)) {
-      weightedHits += 2;
-      matched.push(s.name);
-      anchoredMatched.push(s.name);
-    }
+  // Terme trouvé compté une fois : « GCP » et « GCP (Cloud Run) » ne doublent pas « GCP ».
+  const seen = new Set<string>();
+  let weighted = 0;
+  for (const s of profile.skills) {
+    const hits = skillAliases(s.name).filter((a) => containsTerm(titleNorm, a) || containsTerm(descNorm, a));
+    const fresh = hits.filter((a) => !seen.has(normalize(a).trim()));
+    if (!fresh.length) continue;
+    for (const a of hits) seen.add(normalize(a).trim());
+    const inTitle = hits.some((a) => containsTerm(titleNorm, a));
+    const anchored = s.evidence_experience_ids.length > 0;
+    weighted += (anchored ? SKILL_WEIGHT.anchored : SKILL_WEIGHT.listed) + (inTitle ? SKILL_WEIGHT.inTitle : 0);
+    matched.push(s.name);
+    if (anchored) anchoredMatched.push(s.name);
   }
-  for (const s of listedSkills) {
-    if (skillMatches(descNorm, s.name)) {
-      weightedHits += 1;
-      matched.push(s.name);
-    }
-  }
-
-  const maxWeight = anchoredSkills.length * 2 + listedSkills.length * 1;
-  if (maxWeight === 0) return { score: 30, matched, anchoredMatched };
-
-  const density = weightedHits / maxWeight;
-  const absoluteBoost = Math.min(1, matched.length / 6);
-
-  const score = Math.round(Math.min(100, density * 70 + absoluteBoost * 30));
+  const score = Math.round(100 * (1 - Math.exp(-weighted / SKILL_SATURATION)));
   return { score, matched, anchoredMatched };
 }
 
@@ -288,7 +290,7 @@ export function scoreOffreLocal(
   opts: { juniorOnly?: boolean } = { juniorOnly: getJuniorOnly() }
 ): ScoreResult {
   const sector = scoreSector(profile.sectors, offre.title, offre.description_text);
-  const skills = scoreSkills(profile, offre.description_text);
+  const skills = scoreSkills(profile, offre.description_text, offre.title);
   const country = scoreCountry(profile.target_countries, offre.country);
   const language = scoreLanguage(profile.languages, offre.title, offre.description_text);
   const contract = scoreContract(profile.preferred_contracts, offre);

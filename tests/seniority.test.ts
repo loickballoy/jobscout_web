@@ -100,3 +100,39 @@ describe("compétences écrites avec parenthèses", () => {
     );
   });
 });
+
+describe("poids des compétences", () => {
+  const skill = (name: string, i: number, anchored = false) => ({ id: i, profile_id: 1, name, category: null, level: null, evidence_experience_ids: anchored ? [1] : [] });
+  const offer = { title: "ML Engineer", company: "X", country: "France", description_text: "Python, Docker, Terraform, GCP et SQL." };
+  const skillsScore = (names: string[]) =>
+    scoreOffreLocal({ ...profile, skills: names.map((n, i) => skill(n, i + 1)) } as never, offer, { juniorOnly: false }).breakdown.skills;
+
+  it("ne dépend pas de la taille du profil", () => {
+    const five = ["Python", "Docker", "Terraform", "GCP", "SQL"];
+    const padding = Array.from({ length: 50 }, (_, i) => `Outil${i}`);
+    expect(skillsScore([...five, ...padding])).toBe(skillsScore(five));
+  });
+
+  it("courbe saturante : plus de compétences trouvées = score plus haut, sans dépasser 100", () => {
+    const s1 = skillsScore(["Python"]);
+    const s3 = skillsScore(["Python", "Docker", "SQL"]);
+    const s5 = skillsScore(["Python", "Docker", "Terraform", "GCP", "SQL"]);
+    expect(s1).toBeLessThan(s3);
+    expect(s3).toBeLessThan(s5);
+    expect(s3).toBeGreaterThanOrEqual(35);
+    expect(s5).toBeLessThanOrEqual(100);
+  });
+
+  it("un terme trouvé compte une fois (doublons, parenthèses)", () => {
+    expect(skillsScore(["GCP", "GCP (Cloud Run)", "gcp"])).toBe(skillsScore(["GCP"]));
+  });
+
+  it("compétence ancrée et compétence dans l'intitulé pèsent plus", () => {
+    const listed = scoreOffreLocal({ ...profile, skills: [skill("Docker", 1)] } as never, offer, { juniorOnly: false }).breakdown.skills;
+    const anchored = scoreOffreLocal({ ...profile, skills: [skill("Docker", 1, true)] } as never, offer, { juniorOnly: false }).breakdown.skills;
+    expect(anchored).toBeGreaterThan(listed);
+    const inTitle = scoreOffreLocal({ ...profile, skills: [skill("ML", 1)] } as never, { ...offer, description_text: "x" }, { juniorOnly: false }).breakdown.skills;
+    const inBody = scoreOffreLocal({ ...profile, skills: [skill("Terraform", 1)] } as never, offer, { juniorOnly: false }).breakdown.skills;
+    expect(inTitle).toBeGreaterThan(inBody);
+  });
+});
