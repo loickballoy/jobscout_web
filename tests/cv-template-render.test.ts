@@ -12,9 +12,18 @@ import { RAW_TEMPLATE, fixtureTemplate } from "./cv-template-fixture";
 
 const offre = { title: "Ingénieur IA (H/F)", description_text: "LLM, Docker, Kubernetes.", country: "FR", company: "Exemple" };
 
+/** pdf-parse (pdf.js 1.10) échoue au hasard sur des PDF valides : quelques essais. */
 async function pdfText(buf: Buffer): Promise<string> {
   const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default as (b: Buffer) => Promise<{ text: string }>;
-  return (await pdfParse(buf)).text;
+  let last: unknown;
+  for (let i = 0; i < 5; i++) {
+    try {
+      return (await pdfParse(buf)).text;
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last;
 }
 
 describe("rendu PDF et DOCX", () => {
@@ -87,4 +96,16 @@ describe("stockage du modèle", () => {
     expect(saveCvTemplate({ nope: true }).ok).toBe(false);
     expect(getCvTemplate()?.identity.full_name).toBe("Autre Nom");
   });
+});
+
+describe("nombre de pages", () => {
+  it("lu dans l'arbre des pages, sans dépendre de pdf-parse", async () => {
+    const one = await generateTemplateCv(fixtureTemplate(), offre, "fr", { aiConfigured: false });
+    for (let i = 0; i < 5; i++) expect(await pdfPageCount(one.pdf)).toBe(1);
+    const React = await import("react");
+    const { renderToBuffer, Document, Page, Text } = await import("@react-pdf/renderer");
+    const h = React.createElement;
+    const two = await renderToBuffer(h(Document, null, h(Page, { size: "A4" }, h(Text, null, "1")), h(Page, { size: "A4" }, h(Text, null, "2"))) as never);
+    expect(await pdfPageCount(two)).toBe(2);
+  }, 60_000);
 });

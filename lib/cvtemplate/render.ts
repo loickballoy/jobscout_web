@@ -6,7 +6,7 @@ import { pdfPageCount } from "@/lib/pdf/render";
 import type { TemplateCvDoc } from "./assemble";
 
 const SCALES = [1, 0.96, 0.92, 0.88];
-const MAX_DROPS = 12;
+const MAX_DROPS = 40;
 
 async function render(doc: TemplateCvDoc, scale: number): Promise<Buffer> {
   return renderToBuffer(React.createElement(TemplateCVDocument, { doc, scale }) as any);

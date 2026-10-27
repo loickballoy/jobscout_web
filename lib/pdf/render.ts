@@ -7,17 +7,29 @@ import type { GeneratedCV } from "@/lib/ai/generate-cv";
 import type { GeneratedLM } from "@/lib/ai/generate-lm";
 import type { DocLang } from "@/lib/text/lang";
 
-// pdf-parse expose numpages — usage en .js pour éviter l'effet de bord d'import
+/**
+ * Nombre de pages d'un PDF produit par react-pdf. Lu d'abord dans l'arbre des
+ * pages (« /Type /Pages … /Count N », écrit en clair par react-pdf) : pdf-parse
+ * (pdf.js 1.10) échoue au hasard sur des fichiers valides (« bad XRef entry »,
+ * une fois sur deux sur le même fichier), et l'ancien repli « 1 page » laissait
+ * passer un CV de deux pages pour une page.
+ */
 export async function pdfPageCount(buf: Buffer): Promise<number> {
+  const text = buf.toString("latin1");
+  const counts = [...text.matchAll(/\/Type\s*\/Pages\b[^>]*?\/Count\s+(\d+)/g)].map((m) => Number(m[1]));
+  if (counts.length) return Math.max(...counts);
   const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default as (
     b: Buffer
   ) => Promise<{ numpages: number }>;
-  try {
-    const r = await pdfParse(buf);
-    return r.numpages || 1;
-  } catch {
-    return 1;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const r = await pdfParse(buf);
+      if (r.numpages) return r.numpages;
+    } catch {
+      // Échec aléatoire de pdf.js : on réessaie.
+    }
   }
+  throw new Error("Nombre de pages du PDF illisible.");
 }
 
 // =============================================================
