@@ -15,6 +15,14 @@ import { isServerMode } from "@/lib/server-mode";
 import { getCvTemplate } from "@/lib/cvtemplate/store";
 import { pickCluster } from "@/lib/cvtemplate/select";
 import { classifySeniority, seniorityLabel } from "@/lib/seniority";
+import { getProfile } from "@/lib/db/queries";
+import { getExperienceYears } from "@/lib/seniority-store";
+import { getSearchZones } from "@/lib/zones-store";
+import { inZones } from "@/lib/zones";
+import { resolveOfferLocation } from "@/lib/geo";
+import { templatePlaceholders } from "@/lib/cvtemplate/inspect";
+import { analyzeOffer } from "@/lib/scoring/analysis";
+import { OfferAnalysisCard } from "@/components/app/offer-analysis";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +33,24 @@ export default async function OffreDetailPage({ params }: { params: Promise<{ id
   const cvTemplate = getCvTemplate();
   const probable = cvTemplate ? pickCluster(cvTemplate, offre) : null;
   const templateCluster = probable ? { id: probable.id, name: probable.name } : null;
+
+  // Analyse de l'offre : points forts, points faibles, plan d'action priorisé.
+  const profile = getProfile();
+  const zones = getSearchZones();
+  const geo = resolveOfferLocation({ source: offre.source, location: offre.location, country: offre.country });
+  const analysis = profile
+    ? analyzeOffer({
+        profile,
+        offre,
+        breakdown: offre.score_breakdown,
+        experienceYears: getExperienceYears(),
+        template: cvTemplate,
+        cluster: templateCluster,
+        placeholders: cvTemplate ? templatePlaceholders(cvTemplate).length : 0,
+        inZone: zones.length ? inZones({ lat: geo.lat, lng: geo.lng, precision: geo.precision, code: geo.lat !== null ? ("code" in geo ? geo.code ?? null : null) : null }, zones) : null,
+        zoneLabels: zones.map((z) => z.label),
+      })
+    : null;
 
   const docs = listDocuments({ offreId: offre.id });
   const cvPdf = docs.find((d) => d.type === "cv" && d.format === "pdf") ?? null;
@@ -110,6 +136,7 @@ export default async function OffreDetailPage({ params }: { params: Promise<{ id
                 <ScoreBar label="Pays" value={offre.score_breakdown.country} />
                 {offre.score_breakdown.language != null && <ScoreBar label="Langue" value={offre.score_breakdown.language} />}
                 {offre.score_breakdown.contract != null && <ScoreBar label="Contrat" value={offre.score_breakdown.contract} />}
+                {offre.score_breakdown.experience != null && <ScoreBar label="Expérience" value={offre.score_breakdown.experience} />}
                 {offre.score_breakdown.duration != null && offre.score_breakdown.duration > 0 && <ScoreBar label="Durée V.I.E" value={offre.score_breakdown.duration} />}
               </div>
               {offre.score_breakdown.reason && <p className="mt-5 border-t border-border pt-4 text-small text-textSecondary">{offre.score_breakdown.reason}</p>}
@@ -118,6 +145,7 @@ export default async function OffreDetailPage({ params }: { params: Promise<{ id
         </aside>
 
         <article className="order-2 min-w-0 xl:order-1">
+          {analysis && <OfferAnalysisCard analysis={analysis} />}
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-textSecondary">L'annonce</p>
