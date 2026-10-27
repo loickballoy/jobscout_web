@@ -2,7 +2,11 @@ import "server-only";
 import type { ProfileFull, Language } from "@/lib/cv/types";
 import { classifyContract, type ContractCategory } from "@/lib/contracts";
 import { classifySeniority } from "@/lib/seniority";
-import { getJuniorOnly } from "@/lib/seniority-store";
+import { getExperienceYears } from "@/lib/seniority-store";
+import { CASE_SENSITIVE } from "./tech-terms";
+
+/** Version de la formule : changée, toutes les offres sont recalculées au démarrage (lib/scoring/rescore.ts). */
+export const SCORING_VERSION = "3";
 
 export type ScoreResult = {
   score: number;
@@ -13,6 +17,8 @@ export type ScoreResult = {
     language: number;
     duration: number;
     contract: number;
+    /** Adéquation entre l'expérience demandée et la vôtre (0-100), absente si l'offre n'en dit rien. */
+    experience?: number;
   };
   reason: string;
 };
@@ -37,6 +43,18 @@ function tokenize(s: string): string[] {
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Terme dans le texte. Les sigles qui sont aussi des mots courants (« CAN » / « can »,
+ * « REST » / « rest ») sont cherchés tels quels dans le texte brut, casse comprise.
+ */
+export function hasTermIn(raw: string, norm: string, term: string): boolean {
+  if (CASE_SENSITIVE.has(term.trim())) {
+    const re = new RegExp(`(^|[^A-Za-z0-9+#])${escapeRegex(term.trim())}(?=$|[^A-Za-z0-9+#])`);
+    return re.test(raw);
+  }
+  return containsTerm(norm, term);
 }
 
 function containsTerm(text: string, term: string): boolean {
@@ -89,45 +107,46 @@ export function skillAliases(name: string): string[] {
   return [m[1].trim(), ...m[2].split(",").map((s) => s.trim())].filter((s) => s.length >= 2);
 }
 
-function skillMatches(descNorm: string, name: string): boolean {
-  return skillAliases(name).some((alias) => containsTerm(descNorm, alias));
-}
+/** Poids d'une compétence trouvée : ancrée dans une expérience, simplement listée, présente dans l'intitulé. */
+const SKILL_WEIGHT = { anchored: 1.3, listed: 1, inTitle: 0.5 };
+/** Courbe saturante (poids 1) : 3 compétences ≈ 40, 6 ≈ 63, 10 ≈ 81, 14 ≈ 90. */
+const SKILL_SATURATION = 6;
 
+/**
+ * Compétences : nombre (pondéré) de compétences du profil citées par l'offre,
+ * sur une courbe saturante. Ne dépend PAS de la taille du profil : avant, le
+ * score était divisé par le nombre total de compétences, si bien qu'un profil
+ * riche (60 compétences) plafonnait vers 40/100 et que chaque compétence
+ * ajoutée faisait baisser toutes les offres.
+ */
 function scoreSkills(
   profile: ProfileFull,
-  description: string
+  description: string,
+  title = ""
 ): { score: number; matched: string[]; anchoredMatched: string[] } {
   if (!profile.skills.length) return { score: 30, matched: [], anchoredMatched: [] };
   const descNorm = normalize(description);
-
-  const anchoredSkills = profile.skills.filter((s) => s.evidence_experience_ids.length > 0);
-  const listedSkills = profile.skills.filter((s) => s.evidence_experience_ids.length === 0);
+  const titleNorm = normalize(title);
+  const inT = (a: string) => hasTermIn(title, titleNorm, a);
+  const inD = (a: string) => hasTermIn(description, descNorm, a);
 
   const matched: string[] = [];
   const anchoredMatched: string[] = [];
-
-  let weightedHits = 0;
-  for (const s of anchoredSkills) {
-    if (skillMatches(descNorm, s.name)) {
-      weightedHits += 2;
-      matched.push(s.name);
-      anchoredMatched.push(s.name);
-    }
+  // Terme trouvé compté une fois : « GCP » et « GCP (Cloud Run) » ne doublent pas « GCP ».
+  const seen = new Set<string>();
+  let weighted = 0;
+  for (const s of profile.skills) {
+    const hits = skillAliases(s.name).filter((a) => inT(a) || inD(a));
+    const fresh = hits.filter((a) => !seen.has(normalize(a).trim()));
+    if (!fresh.length) continue;
+    for (const a of hits) seen.add(normalize(a).trim());
+    const inTitle = hits.some(inT);
+    const anchored = s.evidence_experience_ids.length > 0;
+    weighted += (anchored ? SKILL_WEIGHT.anchored : SKILL_WEIGHT.listed) + (inTitle ? SKILL_WEIGHT.inTitle : 0);
+    matched.push(s.name);
+    if (anchored) anchoredMatched.push(s.name);
   }
-  for (const s of listedSkills) {
-    if (skillMatches(descNorm, s.name)) {
-      weightedHits += 1;
-      matched.push(s.name);
-    }
-  }
-
-  const maxWeight = anchoredSkills.length * 2 + listedSkills.length * 1;
-  if (maxWeight === 0) return { score: 30, matched, anchoredMatched };
-
-  const density = weightedHits / maxWeight;
-  const absoluteBoost = Math.min(1, matched.length / 6);
-
-  const score = Math.round(Math.min(100, density * 70 + absoluteBoost * 30));
+  const score = Math.round(100 * (1 - Math.exp(-weighted / SKILL_SATURATION)));
   return { score, matched, anchoredMatched };
 }
 
@@ -278,17 +297,31 @@ export type ScoringInput = {
   contract_type?: string | null;
 };
 
-/** Écart de score selon le niveau demandé, quand l'utilisateur ne vise que des postes junior. */
-const SENIORITY_DELTA = { junior: 5, unknown: 0, mid: -10, senior: -25 } as const;
+/**
+ * Expérience : années demandées (« 5 ans d'expérience », intitulé « Senior » = 5)
+ * comparées à celles du candidat. Rien d'explicite : neutre.
+ * Écart d'1 an −6, 2 ans −12, 3 ans −20, 4 et plus −28 ; poste junior +5.
+ */
+export function scoreExperience(title: string, text: string, candidateYears: number): { fit: number | null; delta: number; required: number | null; junior: boolean } {
+  const s = classifySeniority(title, text);
+  const required = s.years ?? (s.level === "senior" ? 5 : s.level === "mid" ? 3 : null);
+  if (s.level === "junior" && (required === null || required <= candidateYears)) return { fit: 100, delta: 5, required, junior: true };
+  if (required === null) return { fit: null, delta: 0, required: null, junior: false };
+  const gap = required - candidateYears;
+  if (gap <= 0) return { fit: 100, delta: 3, required, junior: false };
+  const steps = [[1, 70, -6], [2, 45, -12], [3, 25, -20]] as const;
+  const hit = steps.find(([g]) => gap <= g);
+  return hit ? { fit: hit[1], delta: hit[2], required, junior: false } : { fit: 10, delta: -28, required, junior: false };
+}
 
 export function scoreOffreLocal(
   profile: ProfileFull,
   offre: ScoringInput,
   // Lu dans les réglages par défaut : les appelants (scan, re-score, profils) n'ont rien à passer.
-  opts: { juniorOnly?: boolean } = { juniorOnly: getJuniorOnly() }
+  opts: { experienceYears?: number } = { experienceYears: getExperienceYears() }
 ): ScoreResult {
   const sector = scoreSector(profile.sectors, offre.title, offre.description_text);
-  const skills = scoreSkills(profile, offre.description_text);
+  const skills = scoreSkills(profile, offre.description_text, offre.title);
   const country = scoreCountry(profile.target_countries, offre.country);
   const language = scoreLanguage(profile.languages, offre.title, offre.description_text);
   const contract = scoreContract(profile.preferred_contracts, offre);
@@ -305,9 +338,9 @@ export function scoreOffreLocal(
   const durationBonus = (duration.score / 100) * 5;   // up to +5
   // Contrat : centré sur 50 → contrat recherché (preferred_contracts) +10, inconnu 0, identifié mais non recherché −6
   const contractDelta = ((contract.score - 50) / 50) * 10;
-  // Niveau : un jeune diplômé n'a rien à attendre d'un poste senior bien noté sur les compétences.
-  const seniority = opts.juniorOnly ? classifySeniority(offre.title, offre.description_text) : null;
-  const seniorityDelta = seniority ? SENIORITY_DELTA[seniority.level] : 0;
+  // Expérience demandée face à la vôtre : un poste à 5 ans bien noté sur les compétences reste hors de portée.
+  const experience = scoreExperience(offre.title, offre.description_text, opts.experienceYears ?? 0);
+  const seniorityDelta = experience.delta;
 
   const finalScore = Math.round(
     Math.max(0, Math.min(100, base + languageBonus + durationBonus + contractDelta + seniorityDelta))
@@ -330,9 +363,9 @@ export function scoreOffreLocal(
     parts.push(`${contract.category.toUpperCase()} recherché`);
   else if (contract.score === 20)
     parts.push(`${contract.category} (non ciblé)`);
-  if (seniority?.level === "senior") parts.push(seniority.years !== null ? `poste senior (${seniority.years} ans+)` : "poste senior");
-  else if (seniority?.level === "mid") parts.push(`${seniority.years} ans d'expérience demandés`);
-  else if (seniority?.level === "junior") parts.push("poste junior");
+  if (experience.junior) parts.push("poste junior");
+  else if (experience.required !== null && experience.fit !== null && experience.fit < 100)
+    parts.push(`${experience.required} an${experience.required > 1 ? "s" : ""} d'expérience demandé${experience.required > 1 ? "s" : ""}`);
   const reason = parts.length ? parts.join(" · ") : "Faible recouvrement avec votre profil";
 
   return {
@@ -344,6 +377,7 @@ export function scoreOffreLocal(
       language: language.score,
       duration: duration.score,
       contract: contract.score,
+      ...(experience.fit !== null ? { experience: experience.fit } : {}),
     },
     reason,
   };
@@ -353,6 +387,6 @@ export function scoreOffresLocal(
   profile: ProfileFull,
   offres: ScoringInput[]
 ): ScoreResult[] {
-  const opts = { juniorOnly: getJuniorOnly() };
+  const opts = { experienceYears: getExperienceYears() };
   return offres.map((o) => scoreOffreLocal(profile, o, opts));
 }

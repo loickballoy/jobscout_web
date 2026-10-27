@@ -16,3 +16,15 @@ export function setJuniorOnly(value: boolean): boolean {
   setSetting(SETTING_KEY, value ? "1" : "0");
   return value;
 }
+
+/** Années d'expérience professionnelle du candidat (hors stages : 0 pour un jeune diplômé). */
+export function getExperienceYears(): number {
+  const n = Number(getSetting("experience_years"));
+  return Number.isFinite(n) && n >= 0 ? Math.min(40, n) : 0;
+}
+
+export function setExperienceYears(n: number): number {
+  const v = Math.max(0, Math.min(40, Math.round(n * 2) / 2));
+  setSetting("experience_years", String(v));
+  return v;
+}

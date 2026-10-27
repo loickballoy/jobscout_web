@@ -36,6 +36,7 @@ export type OffreRow = {
     language?: number;
     duration?: number;
     contract?: number;
+    experience?: number;
     reason?: string;
   } | null;
   is_vie: number;

@@ -90,13 +90,18 @@ WTTJ est interrogée avec la clé de recherche (lecture seule) qu'utilise l'inte
 `lib/scoring/local.ts` — critères exposés dans le détail de chaque offre :
 
 - **Secteur** (30 %) — titre et description comparés aux secteurs cibles du profil
-- **Compétences** (50 %) — une compétence ancrée dans une expérience pèse davantage qu'une compétence simplement listée
+- **Compétences** (50 %) — nombre de compétences du profil citées par l'offre, sur une courbe saturante (3 ≈ 40, 6 ≈ 63, 10 ≈ 81, 14 ≈ 90), indépendante de la taille du profil ; une compétence ancrée dans une expérience pèse un peu plus, une compétence présente dans l'intitulé aussi ; « X (Y, Z) » matche X, Y ou Z, et un même terme ne compte qu'une fois
 - **Pays** (20 %) — 100 si le pays de l'offre fait partie des pays cibles, 0 sinon ; neutre si l'offre n'a pas de pays ou si aucun pays cible n'est déclaré
+- **Expérience** (−28 à +5) — années demandées par l'offre (« 5 ans d'expérience », intitulé « Senior » = 5) comparées aux vôtres (Profil › Niveau de poste, 0 par défaut) : écart d'1 an −6, 2 ans −12, 3 ans −20, 4 et plus −28 ; poste ouvert aux débutants +5 ; neutre si l'offre ne dit rien
 - **Contrat** (±10) — selon les contrats recherchés du profil (`preferred_contracts`, par défaut CDI et CDD) : +10 si le contrat de l'offre en fait partie, neutre s'il est inconnu, −6 s'il est identifié mais non recherché
 - **Bonus Langue** (jusqu'à +8) — +8 si l'offre est rédigée dans une langue maîtrisée (B2+) ; +2,4 si elle n'est pas en anglais mais que l'utilisateur maîtrise l'anglais
 - **Bonus Durée V.I.E** (jusqu'à +5, V.I.E uniquement) — +5 pour 12–24 mois, +3 pour 6–11 mois
 
-Aucun appel IA : instantané et illimité. Re-scoring global : `POST /api/offres/rescore` (après modification du profil).
+Aucun appel IA : instantané et illimité. Les offres en base sont recalculées à chaque enregistrement du profil, et une fois au démarrage quand la formule change (`lib/scoring/rescore.ts`) ; à la main : `POST /api/offres/rescore`.
+
+## Analyse de l'offre (locale)
+
+Sur chaque fiche d'offre, **Analyse et plan d'action** : points forts (compétences demandées que vous avez, secteur, niveau, zone, langue, contrat), points faibles (compétences clés absentes, écart d'expérience, lieu…) et actions priorisées **HIGH / MEDIUM / LOW** pour combler les écarts (compétence déjà dans le CV maître à ajouter au profil, compétence clé à démontrer, écart d'expérience, emplacements du modèle à remplir…). Les compétences demandées viennent d'un dictionnaire de termes techniques (`lib/scoring/tech-terms.ts`) ; les sigles ambigus (« CAN », « REST ») sont cherchés en respectant la casse (`lib/scoring/analysis.ts`).
 
 ## Filtre par distance (local)
 
