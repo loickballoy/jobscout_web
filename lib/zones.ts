@@ -8,13 +8,13 @@
  *   aussi, et France Travail est interrogé sur ces départements.
  * - `linkedin` / `talent` : lieux passés aux recherches de ces sites.
  */
-export type ZoneId = "paris" | "lyon" | "romandie";
+export type ZoneId = "paris" | "lyon" | "romandie" | "belgique";
 
 export type Zone = {
   id: ZoneId;
   label: string;
   /** Code ISO du pays. */
-  country: "FR" | "CH";
+  country: "FR" | "CH" | "BE";
   centers: { name: string; lat: number; lng: number }[];
   radiusKm: number;
   departements: string[];
@@ -61,6 +61,25 @@ export const ZONES: Record<ZoneId, Zone> = {
     departements: [],
     linkedin: ["Geneva, Switzerland", "Lausanne, Vaud, Switzerland", "Neuchâtel, Switzerland", "Fribourg, Switzerland", "Sion, Valais, Switzerland"],
     talent: ["Genève", "Lausanne", "Neuchâtel", "Fribourg", "Sion"],
+  },
+  // Partie francophone : Bruxelles et Wallonie (la Flandre demande le néerlandais).
+  belgique: {
+    id: "belgique",
+    label: "Belgique (Bruxelles et Wallonie)",
+    country: "BE",
+    centers: [
+      { name: "Bruxelles", lat: 50.8503, lng: 4.3517 },
+      { name: "Wavre", lat: 50.7171, lng: 4.6114 },
+      { name: "Louvain-la-Neuve", lat: 50.6681, lng: 4.6118 },
+      { name: "Namur", lat: 50.4674, lng: 4.872 },
+      { name: "Charleroi", lat: 50.4108, lng: 4.4446 },
+      { name: "Mons", lat: 50.4542, lng: 3.9523 },
+      { name: "Liège", lat: 50.6326, lng: 5.5797 },
+    ],
+    radiusKm: 20,
+    departements: [],
+    linkedin: ["Brussels, Brussels Region, Belgium", "Namur, Walloon Region, Belgium", "Charleroi, Walloon Region, Belgium", "Mons, Walloon Region, Belgium", "Liège, Walloon Region, Belgium"],
+    talent: ["Bruxelles", "Wavre", "Namur", "Charleroi", "Mons", "Liège"],
   },
 };
 

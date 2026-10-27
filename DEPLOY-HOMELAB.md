@@ -88,9 +88,9 @@ Tailscale name, with a real HTTPS certificate, visible only on your tailnet.
 2. Log in with `JOBSCOUT_PASSWORD`.
 3. Onboarding: choose the AI provider and paste your key (see [GUIDE-IA.md](GUIDE-IA.md)),
    then upload your CV, check the extracted profile, and set preferences (target
-   countries **France and Suisse**, sectors, contracts, sources).
-4. **Profil › Zones de recherche**: select *Paris et Île-de-France*, *Lyon et agglomération*
-   and *Suisse romande*. The scan then searches those places instead of the
+   countries **France, Suisse and Belgique**, sectors, contracts, sources).
+4. **Profil › Zones de recherche**: select *Paris et Île-de-France*, *Lyon et agglomération*,
+   *Suisse romande* and *Belgique (Bruxelles et Wallonie)*. The scan then searches those places instead of the
    whole country, and the Offres page opens filtered on **Mes zones**.
 5. **Profil › Niveau de poste**: turn on *Postes junior uniquement*. The Offres page
    then opens filtered on **Junior** (junior offers plus offers that state no level;

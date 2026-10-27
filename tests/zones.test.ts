@@ -33,6 +33,9 @@ describe("zones", () => {
     expect(inZones({ lat: 49.2, lng: 4.0, precision: "departement", code: "51" }, paris)).toBe(false);
     expect(inZones({ lat: 46.5197, lng: 6.6323, precision: "ville", code: "CH" }, [ZONES.romandie])).toBe(true); // Lausanne
     expect(inZones({ lat: 47.3769, lng: 8.5417, precision: "ville", code: "CH" }, [ZONES.romandie])).toBe(false); // Zurich
+    expect(inZones({ lat: 50.8503, lng: 4.3517, precision: "ville", code: "BE" }, [ZONES.belgique])).toBe(true); // Bruxelles
+    expect(inZones({ lat: 50.6326, lng: 5.5797, precision: "ville", code: "BE" }, [ZONES.belgique])).toBe(true); // Liège
+    expect(inZones({ lat: 51.2194, lng: 4.4025, precision: "ville", code: "BE" }, [ZONES.belgique])).toBe(false); // Anvers
     expect(inZones({ lat: null, lng: null, precision: "inconnu", code: null }, paris)).toBe(false);
   });
 

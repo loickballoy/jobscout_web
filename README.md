@@ -123,7 +123,7 @@ Page **Modèle CV** : un CV « maître » en JSON (clusters de postes, banque de
 
 ## Zones de recherche
 
-Profil › **Zones de recherche** : Paris et Île-de-France, Lyon et agglomération, Suisse romande. Le scan interroge ces lieux (France Travail par département, LinkedIn et Talent.com par ville) et la page Offres s'ouvre filtrée sur « Mes zones » (`lib/zones.ts`).
+Profil › **Zones de recherche** : Paris et Île-de-France, Lyon et agglomération, Suisse romande, Belgique (Bruxelles et Wallonie). Le scan interroge ces lieux (France Travail par département, LinkedIn et Talent.com par ville) et la page Offres s'ouvre filtrée sur « Mes zones » (`lib/zones.ts`).
 
 ## Niveau de poste
 
