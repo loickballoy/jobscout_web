@@ -411,7 +411,8 @@ describe("nouveau scan après la réparation", () => {
   });
 
   it("runScan, source APEC : texte enregistré et score tirés comme l'APEC (double espace gardée)", async () => {
-    const html = "Maîtrise de la gestion  de projet et SQL ;&lt;li d";
+    // Kubernetes (absent du profil) : sans « gestion de projet » reconnue, la couverture tombe à zéro.
+    const html = "Maîtrise de la gestion  de projet et Kubernetes ;&lt;li d";
     const raw = scraped({ description_html: html, description_text: descriptionTextFromHtml("apec", html) });
     scan.offres = [raw];
     scan.apecAvailable = true;
@@ -421,7 +422,7 @@ describe("nouveau scan après la réparation", () => {
     const stored = getDb().prepare("SELECT id, source, description_html, description_text, score FROM offres WHERE source_id = ?").get(raw.source_id) as {
       id: number; source: string; description_html: string; description_text: string; score: number;
     };
-    const fixed = "Maîtrise de la gestion  de projet et SQL ;";
+    const fixed = "Maîtrise de la gestion  de projet et Kubernetes ;";
     expect(stored).toMatchObject({ source: "apec", description_html: fixed, description_text: fixed });
     expect(stored.score).toBe(localScore(stored.id).score);
     // Garde-fou du test : la double espace change le score (sinon il ne départagerait pas les sources).

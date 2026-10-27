@@ -406,7 +406,8 @@ describe("runScan — score calculé sur le texte enregistré", () => {
   it("l'offre est notée décodée, comme elle est stockée", async () => {
     const raw = scraped({
       title: "Chargé d&apos;affaires",
-      description_text: "Vous menez la n&eacute;gociation commerciale et la gestion de projet. Poste en CDI &agrave; Lyon.",
+      // Négociation, exigence clé, n'est reconnue que décodée : le texte encodé change bien le score.
+      description_text: "Vous menez la n&eacute;gociation commerciale (indispensable). Kubernetes appr&eacute;ci&eacute;. Poste en CDI &agrave; Lyon.",
     });
     scan.offres = [raw];
     const { runScan } = await import("@/lib/scan/orchestrator");

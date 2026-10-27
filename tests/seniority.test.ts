@@ -72,8 +72,9 @@ describe("réglage « postes junior uniquement »", () => {
     expect(fit("2 ans d'expérience", 0)).toMatchObject({ fit: 45, delta: -12 });
     expect(fit("3 ans d'expérience", 0)).toMatchObject({ fit: 25, delta: -20 });
     expect(fit("6 ans d'expérience", 0)).toMatchObject({ fit: 10, delta: -28 });
-    expect(fit("3 ans d'expérience", 3)).toMatchObject({ fit: 100, delta: 3 });
-    expect(fit("Débutant accepté", 0)).toMatchObject({ fit: 100, delta: 5, junior: true });
+    // Expérience suffisante ou poste junior : aucun bonus, c'est la norme.
+    expect(fit("3 ans d'expérience", 3)).toMatchObject({ fit: 100, delta: 0 });
+    expect(fit("Débutant accepté", 0)).toMatchObject({ fit: 100, delta: 0, junior: true });
     expect(fit("Profil curieux", 0)).toMatchObject({ fit: null, delta: 0 });
   });
 
@@ -151,12 +152,12 @@ describe("poids des compétences", () => {
     expect(skillsScore(["GCP", "GCP (Cloud Run)", "gcp"])).toBe(skillsScore(["GCP"]));
   });
 
-  it("compétence ancrée et compétence dans l'intitulé pèsent plus", () => {
-    const listed = scoreOffreLocal({ ...profile, skills: [skill("Docker", 1)] } as never, offer, { experienceYears: 0 }).breakdown.skills;
-    const anchored = scoreOffreLocal({ ...profile, skills: [skill("Docker", 1, true)] } as never, offer, { experienceYears: 0 }).breakdown.skills;
-    expect(anchored).toBeGreaterThan(listed);
-    const inTitle = scoreOffreLocal({ ...profile, skills: [skill("ML", 1)] } as never, { ...offer, description_text: "x" }, { experienceYears: 0 }).breakdown.skills;
-    const inBody = scoreOffreLocal({ ...profile, skills: [skill("Terraform", 1)] } as never, offer, { experienceYears: 0 }).breakdown.skills;
-    expect(inTitle).toBeGreaterThan(inBody);
+  it("couverture des exigences : une exigence clé manquante pèse lourd", () => {
+    const keyOffer = { title: "Python Developer", company: "X", country: "France", description_text: "Python et Docker. Kafka est un plus." };
+    const withKey = scoreOffreLocal({ ...profile, skills: [skill("Python", 1)] } as never, keyOffer, { experienceYears: 0 }).breakdown.skills;
+    const withoutKey = scoreOffreLocal({ ...profile, skills: [skill("Docker", 1)] } as never, keyOffer, { experienceYears: 0 }).breakdown.skills;
+    // Python (intitulé, ×3) + Docker (×1) + Kafka (souhaitée, ×0,5) = 4,5.
+    expect(withKey).toBe(Math.round((3 / 4.5) * 100));
+    expect(withoutKey).toBe(Math.round((1 / 4.5) * 100));
   });
 });
