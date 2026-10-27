@@ -36,7 +36,7 @@ export async function generateTemplateCv(
   const { selection, notice } = await chooseSelection(t, offre, lang, deps);
   const assembled = assembleTemplateCv(t, selection, offre, lang);
   if (notice) assembled.warnings.unshift(notice);
-  const { pdf, doc } = await fitTemplateCvToOnePage(assembled);
-  const docx = await renderTemplateCvDocx(doc);
+  const { pdf, doc, scale } = await fitTemplateCvToOnePage(assembled);
+  const docx = await renderTemplateCvDocx(doc, scale);
   return { doc, selection, pdf, docx };
 }
