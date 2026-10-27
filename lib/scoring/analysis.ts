@@ -7,8 +7,8 @@
  */
 import type { ProfileFull } from "@/lib/cv/types";
 import type { CvTemplate } from "@/lib/cvtemplate/types";
-import { hasTermIn, scoreExperience, skillAliases } from "./local";
-import { TECH_TERMS, termVariants } from "./tech-terms";
+import { scoreExperience } from "./local";
+import { hasTermIn, normalize, offerCoverage, type Importance } from "./requirements";
 
 export type Priority = "HIGH" | "MEDIUM" | "LOW";
 export type Advice = { priority: Priority; title: string; detail: string };
@@ -30,44 +30,18 @@ export type AnalysisInput = {
   zoneLabels: string[];
 };
 
-const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const norm = normalize;
 const list = (xs: string[], max = 6) => (xs.length > max ? `${xs.slice(0, max).join(", ")}…` : xs.join(", "));
 const PRIORITY_ORDER: Record<Priority, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 
-type Requested = { label: string; variants: string[]; key: boolean };
+type Requested = { label: string; variants: string[]; key: boolean; importance: Importance; covered: boolean };
 
-/** Compétences techniques citées par l'annonce ; « clé » si dans l'intitulé ou citée au moins deux fois. */
-export function requestedTerms(title: string, text: string): Requested[] {
-  const titleN = norm(title);
-  const textN = norm(text);
-  const out: Requested[] = [];
-  for (const entry of TECH_TERMS) {
-    const variants = termVariants(entry);
-    const inTitle = variants.some((v) => hasTermIn(title, titleN, v));
-    const inText = variants.some((v) => hasTermIn(text, textN, v));
-    if (!inTitle && !inText) continue;
-    // Variante la plus citée (pas la somme : « Spring Boot » compterait aussi pour « Spring »).
-    const occurrences = Math.max(
-      ...variants.map((v) => {
-        const re = new RegExp(`(^|[^a-z0-9+#])${norm(v).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[^a-z0-9+#])`, "g");
-        return textN.match(re)?.length ?? 0;
-      })
-    );
-    out.push({ label: entry[0], variants, key: inTitle || occurrences >= 2 });
-  }
-  // « C++ » couvert par « C/C++ », « Linux » par « Linux embarqué » : on garde le plus précis.
-  return out.filter((r) => !out.some((o) => o !== r && o.label.length > r.label.length && norm(o.label).includes(norm(r.label)) && o.key >= r.key));
-}
-
-/** Le profil couvre-t-il ce terme (« C++17 » couvre « C++ », « GCP (Cloud Run) » couvre « GCP ») ? */
-function profileHas(aliases: string[], variants: string[]): boolean {
-  return variants.some((v) => {
-    const vn = norm(v);
-    return aliases.some((a) => {
-      const an = norm(a);
-      return an === vn || hasTermIn(a, an, v) || (an.length >= 3 && hasTermIn(v, vn, a));
-    });
-  });
+/**
+ * Exigences de l'annonce (mêmes règles que le score, lib/scoring/requirements.ts) ;
+ * `skillNames` indique ce que le profil couvre.
+ */
+export function requestedTerms(title: string, text: string, skillNames: string[] = []): Requested[] {
+  return offerCoverage(skillNames, title, text).requirements.map((r) => ({ ...r, key: r.importance === "key" }));
 }
 
 /** Tout le texte du modèle de CV (puces, profils, compétences), normalisé. */
@@ -86,10 +60,9 @@ function templateText(t: CvTemplate | null): { raw: string; norm: string } {
 
 export function analyzeOffer(input: AnalysisInput): OfferAnalysis {
   const { profile, offre, breakdown } = input;
-  const aliases = profile.skills.flatMap((s) => skillAliases(s.name));
-  const requested = requestedTerms(offre.title, offre.description_text);
-  const had = requested.filter((r) => profileHas(aliases, r.variants));
-  const missing = requested.filter((r) => !profileHas(aliases, r.variants));
+  const requested = requestedTerms(offre.title, offre.description_text, profile.skills.map((s) => s.name));
+  const had = requested.filter((r) => r.covered);
+  const missing = requested.filter((r) => !r.covered);
   const tpl = templateText(input.template);
   const inTemplate = (r: Requested) => !!tpl.raw && r.variants.some((v) => hasTermIn(tpl.raw, tpl.norm, v));
   const missingKnown = missing.filter(inTemplate); // dans le CV maître, pas dans le profil
@@ -119,7 +92,8 @@ export function analyzeOffer(input: AnalysisInput): OfferAnalysis {
   // -------------------------------------------------------- points faibles
   if (missingKey.length) weaknesses.push(`Compétences clés absentes de ton profil : ${list(missingKey.map((r) => r.label))}.`);
   if (missingKnown.length) weaknesses.push(`Présentes dans ton CV maître mais pas dans ton profil : ${list(missingKnown.map((r) => r.label))}.`);
-  if (missingOther.length) weaknesses.push(`Autres compétences demandées non couvertes : ${list(missingOther.map((r) => r.label))}.`);
+  if (missingOther.length)
+    weaknesses.push(`Autres compétences demandées non couvertes : ${list(missingOther.map((r) => (r.importance === "nice" ? `${r.label} (souhaitée)` : r.label)))}.`);
   if (exp.required !== null && exp.fit !== null && exp.fit < 100)
     weaknesses.push(`${exp.required} an${exp.required > 1 ? "s" : ""} d'expérience demandé${exp.required > 1 ? "s" : ""}, tu en déclares ${input.experienceYears}.`);
   if ((breakdown?.language ?? 100) < 50) weaknesses.push("Langue de l'annonce peu ou pas maîtrisée d'après ton profil.");

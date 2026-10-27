@@ -3,10 +3,13 @@ import type { ProfileFull, Language } from "@/lib/cv/types";
 import { classifyContract, type ContractCategory } from "@/lib/contracts";
 import { classifySeniority } from "@/lib/seniority";
 import { getExperienceYears } from "@/lib/seniority-store";
-import { CASE_SENSITIVE } from "./tech-terms";
+import { nameToCode, strictCountryName } from "@/lib/countries";
+import { containsTerm, hasTermIn, normalize, offerCoverage, skillAliases, type Coverage } from "./requirements";
+
+export { hasTermIn, skillAliases };
 
 /** Version de la formule : changée, toutes les offres sont recalculées au démarrage (lib/scoring/rescore.ts). */
-export const SCORING_VERSION = "3";
+export const SCORING_VERSION = "4";
 
 export type ScoreResult = {
   score: number;
@@ -28,42 +31,18 @@ const STOPWORDS = new Set([
   "the", "a", "an", "of", "and", "or", "to", "in", "on", "for", "with",
 ]);
 
-function normalize(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-}
-
 function tokenize(s: string): string[] {
   return normalize(s)
     .split(/[^a-z0-9+#.]+/)
     .filter((t) => t.length >= 2 && !STOPWORDS.has(t));
 }
 
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 /**
- * Terme dans le texte. Les sigles qui sont aussi des mots courants (« CAN » / « can »,
- * « REST » / « rest ») sont cherchés tels quels dans le texte brut, casse comprise.
+ * Secteur / métier : une offre relève d'un secteur, pas de tous. 100 si
+ * l'intitulé correspond à l'un de vos secteurs, 60 si seule la description en
+ * parle, 0 sinon (plus de moyenne sur tous les secteurs, qui pénalisait les
+ * profils à plusieurs cibles).
  */
-export function hasTermIn(raw: string, norm: string, term: string): boolean {
-  if (CASE_SENSITIVE.has(term.trim())) {
-    const re = new RegExp(`(^|[^A-Za-z0-9+#])${escapeRegex(term.trim())}(?=$|[^A-Za-z0-9+#])`);
-    return re.test(raw);
-  }
-  return containsTerm(norm, term);
-}
-
-function containsTerm(text: string, term: string): boolean {
-  const t = normalize(term).trim();
-  if (t.length < 2) return false;
-  const re = new RegExp(`(^|[^a-z0-9+#])${escapeRegex(t)}(?=$|[^a-z0-9+#])`, "g");
-  return re.test(text);
-}
-
 function scoreSector(
   sectors: string[],
   title: string,
@@ -72,89 +51,42 @@ function scoreSector(
   if (!sectors.length) return { score: 50, matched: [] };
   const titleNorm = normalize(title);
   const descNorm = normalize(description);
-  const matched: string[] = [];
-  let total = 0;
-
-  for (const sector of sectors) {
-    const tokens = tokenize(sector);
-    if (!tokens.length) continue;
-    const inTitle = tokens.some((t) => containsTerm(titleNorm, t));
-    const inDesc = tokens.some((t) => containsTerm(descNorm, t));
-    if (inTitle) {
-      total += 1.0;
-      matched.push(sector);
-    } else if (inDesc) {
-      total += 0.6;
-      matched.push(sector);
-    }
-  }
-  const best = sectors.length === 0 ? 0 : (total / sectors.length) * 100;
-  const hasTitleMatch = matched.some((s) =>
-    tokenize(s).some((t) => containsTerm(titleNorm, t))
-  );
-  const score = Math.round(Math.min(100, hasTitleMatch ? Math.max(best, 70) : best));
-  return { score, matched };
+  const inTitle = sectors.filter((s) => {
+    const tokens = tokenize(s);
+    return tokens.length > 0 && tokens.some((t) => containsTerm(titleNorm, t));
+  });
+  if (inTitle.length) return { score: 100, matched: inTitle };
+  const inDesc = sectors.filter((s) => {
+    const tokens = tokenize(s);
+    return tokens.length > 0 && tokens.some((t) => containsTerm(descNorm, t));
+  });
+  return { score: inDesc.length ? 60 : 0, matched: inDesc };
 }
 
 /**
- * Formes d'une compétence : « IA générative (Generative AI) » → « IA générative »,
- * « Generative AI » ; « IA explicable (XAI, LIME, SHAP) » → les quatre. Le nom
- * entier n'apparaît presque jamais tel quel dans une annonce.
+ * Compétences : part pondérée des exigences de l'offre que le profil couvre
+ * (lib/scoring/requirements.ts). Exigences clés ×3, normales ×1, souhaitées ×0,5.
+ * Une offre qui ne cite (presque) aucune compétence repérable ne peut pas
+ * afficher un bon score de compétences : rien ne permet de l'affirmer.
  */
-export function skillAliases(name: string): string[] {
-  const m = /^(.*?)\s*\(([^()]*)\)\s*$/.exec(name.trim());
-  if (!m || !m[1].trim()) return [name.trim()];
-  return [m[1].trim(), ...m[2].split(",").map((s) => s.trim())].filter((s) => s.length >= 2);
+function scoreSkills(profile: ProfileFull, description: string, title: string): { score: number; coverage: Coverage } {
+  const coverage = offerCoverage(profile.skills.map((s) => s.name), title, description);
+  if (coverage.ratio === null) return { score: 40, coverage };
+  let score = Math.round(coverage.ratio * 100);
+  if (coverage.weightTotal < 3) score = Math.min(score, 70);
+  return { score, coverage };
 }
 
-/** Poids d'une compétence trouvée : ancrée dans une expérience, simplement listée, présente dans l'intitulé. */
-const SKILL_WEIGHT = { anchored: 1.3, listed: 1, inTitle: 0.5 };
-/** Courbe saturante (poids 1) : 3 compétences ≈ 40, 6 ≈ 63, 10 ≈ 81, 14 ≈ 90. */
-const SKILL_SATURATION = 6;
-
-/**
- * Compétences : nombre (pondéré) de compétences du profil citées par l'offre,
- * sur une courbe saturante. Ne dépend PAS de la taille du profil : avant, le
- * score était divisé par le nombre total de compétences, si bien qu'un profil
- * riche (60 compétences) plafonnait vers 40/100 et que chaque compétence
- * ajoutée faisait baisser toutes les offres.
- */
-function scoreSkills(
-  profile: ProfileFull,
-  description: string,
-  title = ""
-): { score: number; matched: string[]; anchoredMatched: string[] } {
-  if (!profile.skills.length) return { score: 30, matched: [], anchoredMatched: [] };
-  const descNorm = normalize(description);
-  const titleNorm = normalize(title);
-  const inT = (a: string) => hasTermIn(title, titleNorm, a);
-  const inD = (a: string) => hasTermIn(description, descNorm, a);
-
-  const matched: string[] = [];
-  const anchoredMatched: string[] = [];
-  // Terme trouvé compté une fois : « GCP » et « GCP (Cloud Run) » ne doublent pas « GCP ».
-  const seen = new Set<string>();
-  let weighted = 0;
-  for (const s of profile.skills) {
-    const hits = skillAliases(s.name).filter((a) => inT(a) || inD(a));
-    const fresh = hits.filter((a) => !seen.has(normalize(a).trim()));
-    if (!fresh.length) continue;
-    for (const a of hits) seen.add(normalize(a).trim());
-    const inTitle = hits.some(inT);
-    const anchored = s.evidence_experience_ids.length > 0;
-    weighted += (anchored ? SKILL_WEIGHT.anchored : SKILL_WEIGHT.listed) + (inTitle ? SKILL_WEIGHT.inTitle : 0);
-    matched.push(s.name);
-    if (anchored) anchoredMatched.push(s.name);
-  }
-  const score = Math.round(100 * (1 - Math.exp(-weighted / SKILL_SATURATION)));
-  return { score, matched, anchoredMatched };
+/** Pays comparés par code ISO : « Suisse », « Switzerland » et « CH » sont le même pays. */
+function countryKey(raw: string): string {
+  return nameToCode(strictCountryName(raw)) ?? normalize(raw).trim();
 }
 
 function scoreCountry(targetCountries: string[], offreCountry: string | null): number {
   if (!targetCountries.length) return 50;
   if (!offreCountry) return 50;
-  const targetSet = new Set(targetCountries.map(normalize));
-  return targetSet.has(normalize(offreCountry)) ? 100 : 0;
+  const targetSet = new Set(targetCountries.map(countryKey));
+  return targetSet.has(countryKey(offreCountry)) ? 100 : 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -286,7 +218,7 @@ function scoreContract(
 }
 
 // ----------------------------------------------------------------------------
-// Final scoring : weighted base + language/duration bonuses on top, capped 100
+// Final scoring : weighted base, penalties only, capped by missing key requirements
 // ----------------------------------------------------------------------------
 
 export type ScoringInput = {
@@ -300,15 +232,16 @@ export type ScoringInput = {
 /**
  * Expérience : années demandées (« 5 ans d'expérience », intitulé « Senior » = 5)
  * comparées à celles du candidat. Rien d'explicite : neutre.
- * Écart d'1 an −6, 2 ans −12, 3 ans −20, 4 et plus −28 ; poste junior +5.
+ * Écart d'1 an −6, 2 ans −12, 3 ans −20, 4 et plus −28. Aucun bonus : une
+ * expérience suffisante est la norme, pas un mérite.
  */
 export function scoreExperience(title: string, text: string, candidateYears: number): { fit: number | null; delta: number; required: number | null; junior: boolean } {
   const s = classifySeniority(title, text);
   const required = s.years ?? (s.level === "senior" ? 5 : s.level === "mid" ? 3 : null);
-  if (s.level === "junior" && (required === null || required <= candidateYears)) return { fit: 100, delta: 5, required, junior: true };
+  if (s.level === "junior" && (required === null || required <= candidateYears)) return { fit: 100, delta: 0, required, junior: true };
   if (required === null) return { fit: null, delta: 0, required: null, junior: false };
   const gap = required - candidateYears;
-  if (gap <= 0) return { fit: 100, delta: 3, required, junior: false };
+  if (gap <= 0) return { fit: 100, delta: 0, required, junior: false };
   const steps = [[1, 70, -6], [2, 45, -12], [3, 25, -20]] as const;
   const hit = steps.find(([g]) => gap <= g);
   return hit ? { fit: hit[1], delta: hit[2], required, junior: false } : { fit: 10, delta: -28, required, junior: false };
@@ -327,33 +260,34 @@ export function scoreOffreLocal(
   const contract = scoreContract(profile.preferred_contracts, offre);
   const duration = scoreDuration(contract.category, offre.description_text);
 
-  // Weighted base, same balance as before (sector 30 / skills 50 / country 20)
-  const base =
-    sector.score * 0.3 + skills.score * 0.5 + country * 0.2;
+  // Base : compétences (couverture des exigences) 55 %, secteur/métier 25 %, pays 20 %.
+  const base = skills.score * 0.55 + sector.score * 0.25 + country * 0.2;
 
-  // Bonuses on top, capped overall at 100. Tuned so a perfect-base offer
-  // (100) stays at 100, and a so-so 60-pts offer can climb to ~73 if it
-  // matches a 12-24 mois V.I.E in the user's strongest language.
-  const languageBonus = (language.score / 100) * 8;   // up to +8
-  const durationBonus = (duration.score / 100) * 5;   // up to +5
-  // Contrat : centré sur 50 → contrat recherché (preferred_contracts) +10, inconnu 0, identifié mais non recherché −6
-  const contractDelta = ((contract.score - 50) / 50) * 10;
-  // Expérience demandée face à la vôtre : un poste à 5 ans bien noté sur les compétences reste hors de portée.
+  // Ajustements : uniquement des retraits. Ce qui est normal (bonne langue, bon
+  // contrat, expérience suffisante) ne rapporte rien ; ce qui coince retire.
   const experience = scoreExperience(offre.title, offre.description_text, opts.experienceYears ?? 0);
-  const seniorityDelta = experience.delta;
+  const contractPenalty = contract.score <= 20 ? -10 : 0;
+  const languagePenalty = language.score === 0 ? -10 : language.score < 100 ? -5 : 0;
+  // V.I.E : durée hors de la fourchette 12-24 mois légèrement pénalisée.
+  const durationPenalty = contract.category === "vie" && duration.months !== null && duration.score < 60 ? -3 : 0;
+
+  // Plafonds : une exigence clé non couverte empêche un score élevé, quel que soit le reste.
+  const missingKey = skills.coverage.missingKey.length;
+  let cap = missingKey ? Math.max(40, 100 - 12 * missingKey) : 100;
+  if (experience.required !== null && experience.required - (opts.experienceYears ?? 0) >= 3) cap = Math.min(cap, 55);
 
   const finalScore = Math.round(
-    Math.max(0, Math.min(100, base + languageBonus + durationBonus + contractDelta + seniorityDelta))
+    Math.max(0, Math.min(cap, base + experience.delta + contractPenalty + languagePenalty + durationPenalty))
   );
 
   // Build human-readable reason
   const parts: string[] = [];
   if (sector.matched.length) parts.push(`secteur ${sector.matched.slice(0, 2).join("/")}`);
-  if (skills.anchoredMatched.length) {
-    parts.push(`skills ancrées : ${skills.anchoredMatched.slice(0, 3).join(", ")}`);
-  } else if (skills.matched.length) {
-    parts.push(`skills : ${skills.matched.slice(0, 3).join(", ")}`);
-  }
+  const reqs = skills.coverage.requirements;
+  if (reqs.length) {
+    parts.push(`couvre ${reqs.filter((r) => r.covered).length}/${reqs.length} exigences`);
+    if (missingKey) parts.push(`clé${missingKey > 1 ? "s" : ""} manquante${missingKey > 1 ? "s" : ""} : ${skills.coverage.missingKey.slice(0, 3).map((r) => r.label).join(", ")}`);
+  } else parts.push("aucune compétence technique repérée dans l'annonce");
   if (country === 100) parts.push("pays OK");
   else if (country === 0) parts.push("hors pays cibles");
   if (language.matched) parts.push(`langue ${language.offerLang.toUpperCase()} OK`);

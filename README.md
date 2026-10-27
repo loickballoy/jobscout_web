@@ -87,15 +87,16 @@ WTTJ est interrogée avec la clé de recherche (lecture seule) qu'utilise l'inte
 
 ## Scoring des offres (local, déterministe, gratuit)
 
-`lib/scoring/local.ts` — critères exposés dans le détail de chaque offre :
+`lib/scoring/local.ts` — score honnête : aucun bonus, seulement des retraits et des plafonds. Critères exposés dans le détail de chaque offre :
 
-- **Secteur** (30 %) — titre et description comparés aux secteurs cibles du profil
-- **Compétences** (50 %) — nombre de compétences du profil citées par l'offre, sur une courbe saturante (3 ≈ 40, 6 ≈ 63, 10 ≈ 81, 14 ≈ 90), indépendante de la taille du profil ; une compétence ancrée dans une expérience pèse un peu plus, une compétence présente dans l'intitulé aussi ; « X (Y, Z) » matche X, Y ou Z, et un même terme ne compte qu'une fois
+- **Compétences** (55 %) — part des exigences de l'annonce couvertes par le profil (`lib/scoring/requirements.ts`). Exigences = termes techniques du dictionnaire (`lib/scoring/tech-terms.ts`) cités par l'offre + compétences du profil qu'elle cite. Chaque exigence est pondérée : **clé ×3** (dans l'intitulé, citée deux fois, ou « indispensable / requis / maîtrise de / required »), **normale ×1**, **souhaitée ×0,5** (« un plus / apprécié / nice to have »). Sans exigence repérable : 40 ; très peu d'exigences (poids < 3) : 70 au plus
+- **Secteur** (25 %) — 100 si l'intitulé correspond à un secteur cible, 60 si seule la description y correspond, 0 sinon
 - **Pays** (20 %) — 100 si le pays de l'offre fait partie des pays cibles, 0 sinon ; neutre si l'offre n'a pas de pays ou si aucun pays cible n'est déclaré
-- **Expérience** (−28 à +5) — années demandées par l'offre (« 5 ans d'expérience », intitulé « Senior » = 5) comparées aux vôtres (Profil › Niveau de poste, 0 par défaut) : écart d'1 an −6, 2 ans −12, 3 ans −20, 4 et plus −28 ; poste ouvert aux débutants +5 ; neutre si l'offre ne dit rien
-- **Contrat** (±10) — selon les contrats recherchés du profil (`preferred_contracts`, par défaut CDI et CDD) : +10 si le contrat de l'offre en fait partie, neutre s'il est inconnu, −6 s'il est identifié mais non recherché
-- **Bonus Langue** (jusqu'à +8) — +8 si l'offre est rédigée dans une langue maîtrisée (B2+) ; +2,4 si elle n'est pas en anglais mais que l'utilisateur maîtrise l'anglais
-- **Bonus Durée V.I.E** (jusqu'à +5, V.I.E uniquement) — +5 pour 12–24 mois, +3 pour 6–11 mois
+- **Plafond exigences clés** — chaque exigence clé non couverte plafonne le score : 88, 76, 64… jamais sous 40. Un 100/100 n'est possible que si toutes les exigences clés sont couvertes
+- **Expérience** (0 à −28) — années demandées (« 5 ans d'expérience », intitulé « Senior » = 5) comparées aux vôtres (Profil › Niveau de poste) : écart d'1 an −6, 2 ans −12, 3 ans −20, 4 et plus −28 ; écart de 3 ans ou plus : score plafonné à 55 ; neutre si l'offre ne dit rien
+- **Contrat** (0 ou −10) — −10 si le contrat est identifié mais hors de vos contrats recherchés
+- **Langue** (0, −5 ou −10) — −5 si la langue de l'annonce est moyennement maîtrisée, −10 si elle ne l'est pas
+- **Durée V.I.E** (0 ou −3) — −3 hors de la fourchette 12–24 mois
 
 Aucun appel IA : instantané et illimité. Les offres en base sont recalculées à chaque enregistrement du profil, et une fois au démarrage quand la formule change (`lib/scoring/rescore.ts`) ; à la main : `POST /api/offres/rescore`.
 
@@ -126,7 +127,7 @@ Profil › **Zones de recherche** : Paris et Île-de-France, Lyon et agglomérat
 
 ## Niveau de poste
 
-Profil › **Niveau de poste** › « Postes junior uniquement » : niveau de chaque offre déduit localement (intitulé « Senior », « Lead », « Junior » ; « 5 ans d'expérience », « 3+ years » ; champ « Débutant accepté » de France Travail), filtre « Junior » de la page Offres actif d'office, −25 au score des postes seniors (−10 pour 3 à 4 ans), recherche LinkedIn sur « Entry level » et « Associate » (`lib/seniority.ts`).
+Profil › **Niveau de poste** › « Postes junior uniquement » : niveau de chaque offre déduit localement (intitulé « Senior », « Lead », « Junior » ; « 5 ans d'expérience », « 3+ years » ; champ « Débutant accepté » de France Travail), filtre « Junior » de la page Offres actif d'office, retrait au score selon l'écart d'expérience (voir Scoring), recherche LinkedIn sur « Entry level » et « Associate » (`lib/seniority.ts`).
 
 ## Suivi des candidatures
 
