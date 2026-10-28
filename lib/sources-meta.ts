@@ -52,7 +52,11 @@ export const SOURCES_META: SourceMeta[] = [
   { id: "hellowork", label: "HelloWork", sublabel: "Ex-RegionsJob (France) · à activer vous-même", scope: "fr", optIn: true },
   { id: "francetravail", label: "France Travail", sublabel: "Ex-Pôle Emploi (France)", scope: "fr" },
   { id: "talent", label: "Talent.com", sublabel: "Francophonie · Canada · USA · à activer vous-même", scope: "world", optIn: true },
+  { id: "jobup", label: "jobup.ch", sublabel: "Suisse romande · à activer vous-même", scope: "world", optIn: true },
 ];
+
+/** Origines d'offres qui ne sont pas des sources de scan (ajout manuel). */
+export const EXTRA_SOURCE_LABELS: Record<string, string> = { manuel: "Ajout manuel" };
 
 export const SOURCE_IDS = SOURCES_META.map((s) => s.id);
 
@@ -74,5 +78,5 @@ export function sourceRequiresEngine(id: string): boolean {
 }
 
 export function sourceLabel(id: string): string {
-  return SOURCES_META.find((s) => s.id === id)?.label ?? id;
+  return SOURCES_META.find((s) => s.id === id)?.label ?? EXTRA_SOURCE_LABELS[id] ?? id;
 }

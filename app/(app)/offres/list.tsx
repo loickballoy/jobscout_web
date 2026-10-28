@@ -10,12 +10,12 @@ import { seniorityLabel } from "@/lib/seniority";
 import { cn, formatRelativeDate, scoreColor } from "@/lib/utils";
 import type { OffreSummary, OffersSearch, OffersSort } from "@/lib/db/offres";
 import { CONTRACT_LABELS, CONTRACT_ORDER, type ContractCategory } from "@/lib/contracts";
-import { SOURCES_META } from "@/lib/sources-meta";
+import { EXTRA_SOURCE_LABELS, SOURCES_META } from "@/lib/sources-meta";
 import { previewExcerpt } from "@/lib/offres/preview";
 import { DISTANCE_RADII, distanceLabel, isApproximate, radiusLabel } from "@/lib/distance/format";
 import { DistanceHomePicker, type HomeCommune } from "@/components/app/distance-home";
 
-const sourceLabels = Object.fromEntries(SOURCES_META.map((source) => [source.id, source.label]));
+const sourceLabels: Record<string, string> = { ...Object.fromEntries(SOURCES_META.map((source) => [source.id, source.label])), ...EXTRA_SOURCE_LABELS };
 const numberFormat = new Intl.NumberFormat("fr-FR");
 
 /** « 1 offre correspond », « 12 offres correspondent », « Aucune offre ne correspond ». */
@@ -407,7 +407,7 @@ function OfferPreview({ offer }: { offer: OffreSummary }) {
       </div>
       <div className="space-y-2 border-t border-border pt-5">
         <Link href={`/offres/${offer.id}`} className="button-primary flex min-h-11 items-center justify-center gap-2 rounded-full px-4 text-center text-small font-medium">Voir l’offre et préparer le dossier <ArrowRight className="h-4 w-4 shrink-0" /></Link>
-        <a href={offer.url} target="_blank" rel="noopener noreferrer" className="flex h-10 items-center justify-center gap-2 text-small font-semibold text-accent hover:underline">Annonce d’origine <ArrowUpRight className="h-4 w-4" /></a>
+        {offer.url && <a href={offer.url} target="_blank" rel="noopener noreferrer" className="flex h-10 items-center justify-center gap-2 text-small font-semibold text-accent hover:underline">Annonce d’origine <ArrowUpRight className="h-4 w-4" /></a>}
       </div>
     </aside>
   );

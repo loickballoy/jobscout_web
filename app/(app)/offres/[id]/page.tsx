@@ -10,7 +10,7 @@ import { DescriptionRenderer } from "@/components/app/description-renderer";
 import { ActionsPanel } from "./actions";
 import { formatRelativeDate, scoreColor } from "@/lib/utils";
 import { CONTRACT_LABELS } from "@/lib/contracts";
-import { SOURCES_META } from "@/lib/sources-meta";
+import { sourceLabel as sourceLabelOf } from "@/lib/sources-meta";
 import { isServerMode } from "@/lib/server-mode";
 import { getCvTemplate } from "@/lib/cvtemplate/store";
 import { pickCluster } from "@/lib/cvtemplate/select";
@@ -61,7 +61,7 @@ export default async function OffreDetailPage({ params }: { params: Promise<{ id
   const existingApplication = getDb().prepare("SELECT status FROM candidatures WHERE offre_id = ? LIMIT 1").get(offre.id) as { status: string } | undefined;
   const score = scoreColor(offre.score ?? 0);
   const distance = offerDistanceText(offre);
-  const sourceLabel = SOURCES_META.find((source) => source.id === offre.source)?.label ?? offre.source;
+  const sourceLabel = sourceLabelOf(offre.source);
   const contractLabel = offre.contract_category !== "autre" ? CONTRACT_LABELS[offre.contract_category] : null;
   const seniority = classifySeniority(offre.title, offre.description_text);
   const levelLabel = seniorityLabel(seniority);
@@ -108,9 +108,11 @@ export default async function OffreDetailPage({ params }: { params: Promise<{ id
           {levelLabel && (
             <Badge variant={seniority.level === "junior" ? "success" : seniority.level === "senior" ? "danger" : "warning"}>{levelLabel}</Badge>
           )}
-          <a href={offre.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-small font-semibold text-accent hover:underline sm:ml-auto">
-            Voir l'annonce d'origine <ArrowUpRight className="h-4 w-4" />
-          </a>
+          {offre.url && (
+            <a href={offre.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-small font-semibold text-accent hover:underline sm:ml-auto">
+              Voir l'annonce d'origine <ArrowUpRight className="h-4 w-4" />
+            </a>
+          )}
         </div>
       </header>
 
