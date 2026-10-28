@@ -3,6 +3,7 @@ import { getDistanceHome, suggestedDistanceHome } from "@/lib/distance/home";
 import { PageHeader } from "@/components/app/page-header";
 import { OffresList } from "./list";
 import { ScanButton } from "./scan-button";
+import { AddOffreButton } from "./add-offre-button";
 import { getSearchZones } from "@/lib/zones-store";
 import { getJuniorOnly } from "@/lib/seniority-store";
 
@@ -42,7 +43,7 @@ export default async function OffresPage({ searchParams }: { searchParams: Promi
         eyebrow="Découvrir"
         title="Vos prochaines opportunités"
         subtitle={subtitle}
-        actions={<ScanButton />}
+        actions={<div className="flex flex-wrap gap-2"><AddOffreButton /><ScanButton /></div>}
       />
       <OffresList initialResult={initial} initialVieOnly={vieOnly} initialMinScore={minScore} homeSuggestion={homeSuggestion} initialZonesOnly={zones.length > 0} initialJuniorOnly={juniorOnly} />
     </>

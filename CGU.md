@@ -150,6 +150,12 @@ En bref : les conditions de LinkedIn, Welcome to the Jungle, HelloWork et Talent
 - **Ce que fait JobScout** : il charge les pages de résultats des sites nationaux qui correspondent à vos pays cibles (France si vous n'en indiquez aucun). Il charge ensuite la page de chaque offre, en se présentant comme un navigateur Chrome.
 - **Conditions du site** : [Terms of Service](https://ca.talent.com/en/tos), en anglais, lues sur le site canadien. Elles interdisent le « scraping » et les robots qui envoient plus de requêtes qu'un humain (section C.5). Les conditions des autres sites nationaux, dont `fr.talent.com`, n'ont pas été vérifiées.
 
+### jobup.ch
+
+- **Par défaut** : décochée, à activer vous-même.
+- **Ce que fait JobScout** : il interroge la recherche du site (son API de recherche, sinon la page de résultats) pour les villes de vos zones suisses, ou toute la Suisse si elle fait partie de vos pays cibles. Il charge ensuite la page de chaque offre, en se présentant comme un navigateur Chrome.
+- **Conditions du site** : conditions générales de JobCloud (éditeur de jobup.ch), non vérifiées. Lisez-les avant d'activer la source.
+
 ### Civiweb (V.I.E, Business France)
 
 - **Par défaut** : suspendue. Elle ne peut plus être cochée.

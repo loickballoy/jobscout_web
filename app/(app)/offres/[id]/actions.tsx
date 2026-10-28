@@ -178,12 +178,13 @@ export function ActionsPanel({
 
   // Geste unique de la 3.4.10 : ouvrir l'annonce ET enregistrer la candidature « Envoyée ».
   async function apply() {
-    if (!/^https?:\/\//i.test(offreUrl)) {
+    // Offre ajoutée à la main sans lien : la candidature est seulement enregistrée.
+    if (offreUrl && !/^https?:\/\//i.test(offreUrl)) {
       setError("Le lien de l'annonce est invalide : retrouvez-la sur le site d'origine.");
       return;
     }
     // Ouverture synchrone, dans le geste de l'utilisateur : sinon le navigateur la bloque.
-    window.open(offreUrl, "_blank", "noopener,noreferrer");
+    if (offreUrl) window.open(offreUrl, "_blank", "noopener,noreferrer");
     setApplyLoading(true);
     setError(null);
     try {
@@ -366,11 +367,11 @@ export function ActionsPanel({
 
       <div className="space-y-2 border-t border-border pt-4">
         {applied ? (
-          <Button asChild variant="secondary" className="w-full" size="md">
+          offreUrl ? <Button asChild variant="secondary" className="w-full" size="md">
             <a href={offreUrl} target="_blank" rel="noopener noreferrer">
               Revoir l'annonce <ArrowUpRight className="h-4 w-4" />
             </a>
-          </Button>
+          </Button> : null
         ) : (
           <Button onClick={apply} variant={docsReady ? "primary" : "secondary"} className="w-full" size="lg" disabled={busy}>
             {applyLoading ? <Spinner size={16} className="text-current" /> : <Send className="h-4 w-4" />}
