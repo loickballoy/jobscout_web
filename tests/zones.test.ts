@@ -1,10 +1,12 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb } from "@/lib/db";
 import { searchOffres, setOffreScore, upsertOffreFromSource, type ScrapedOffre } from "@/lib/db/offres";
 import { nameToCode } from "@/lib/countries";
 import { ZONES, inZones, searchLocations } from "@/lib/zones";
 import { getSearchZoneIds, getSearchZones, setSearchZoneIds } from "@/lib/zones-store";
 import { departementChunks } from "@/lib/scrapers/francetravail";
+import { talentScraper } from "@/lib/scrapers/talent";
+import { jobupScraper } from "@/lib/scrapers/jobup";
 
 let seq = 0;
 function add(location: string, country = "France", source = "hellowork"): number {
@@ -77,4 +79,63 @@ describe("zones", () => {
     // Sans zone configurée : aucun filtre, même demandé.
     expect(searchOffres({ zonesOnly: true }).total).toBe(4);
   });
+
+  it("nouvelles zones : Zurich et Zoug, Luxembourg, Pays-Bas (Randstad)", () => {
+    const at = (lat: number, lng: number, code: string) => ({ lat, lng, precision: "ville", code });
+    expect(inZones(at(47.3769, 8.5417, "CH"), [ZONES.zurich])).toBe(true); // Zurich
+    expect(inZones(at(47.1662, 8.5155, "CH"), [ZONES.zurich])).toBe(true); // Zoug
+    expect(inZones(at(46.948, 7.4474, "CH"), [ZONES.zurich])).toBe(false); // Berne
+    expect(inZones(at(49.6116, 6.1319, "LU"), [ZONES.luxembourg])).toBe(true);
+    expect(inZones(at(49.4958, 5.9806, "LU"), [ZONES.luxembourg])).toBe(true); // Esch-sur-Alzette
+    expect(inZones(at(49.1193, 6.1757, "FR"), [ZONES.luxembourg])).toBe(false); // Metz
+    for (const [lat, lng] of [[52.3676, 4.9041], [51.9244, 4.4777], [52.0907, 5.1214], [52.0705, 4.3007]])
+      expect(inZones(at(lat, lng, "NL"), [ZONES.paysbas])).toBe(true);
+    expect(inZones(at(51.4416, 5.4697, "NL"), [ZONES.paysbas])).toBe(false); // Eindhoven
+    expect(ZONES.belgique.label).toBe("Belgique (Bruxelles et Wallonie)");
+  });
+
+  it("lieux interrogés : LinkedIn par ville, Talent.com sans liste pour les Pays-Bas", () => {
+    const zones = [ZONES.zurich, ZONES.luxembourg, ZONES.paysbas];
+    const li = searchLocations(["Pays-Bas", "Luxembourg", "Suisse"], zones, "linkedin", nameToCode).map((l) => l.location);
+    expect(li).toEqual(expect.arrayContaining(["Zurich, Switzerland", "Zug, Switzerland", "Luxembourg", "Amsterdam, North Holland, Netherlands", "The Hague, South Holland, Netherlands"]));
+    expect(li).not.toContain("Pays-Bas");
+    const talent = searchLocations([], [ZONES.paysbas], "talent", nameToCode);
+    expect(talent).toEqual([{ location: "", country: null }]);
+  });
+
+  it("nouvelles zones décochées par défaut", () => {
+    expect(getSearchZoneIds()).toEqual([]);
+    expect(setSearchZoneIds(["zurich", "luxembourg", "paysbas"])).toEqual(["zurich", "luxembourg", "paysbas"]);
+  });
 });
+
+describe("zones et sources (sans réseau)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const stubFetch = () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL) => {
+      calls.push(String(input));
+      return new Response("<html></html>", { status: 200, headers: { "content-type": "text/html" } });
+    }));
+    return calls;
+  };
+
+  it("Talent.com : lu.talent.com pour la zone Luxembourg, aucun appel pour les Pays-Bas seuls", async () => {
+    let calls = stubFetch();
+    for await (const _ of talentScraper.scrape({ sectors: ["finance"], countries: [], zones: [ZONES.luxembourg] }, () => {})) void _;
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((u) => u.startsWith("https://lu.talent.com/jobs?"))).toBe(true);
+    expect(calls[0]).toContain("l=Luxembourg");
+    calls = stubFetch();
+    for await (const _ of talentScraper.scrape({ sectors: ["finance"], countries: [], zones: [ZONES.paysbas] }, () => {})) void _;
+    expect(calls).toEqual([]);
+  });
+
+  it("jobup.ch : villes de la zone Zurich et Zoug", async () => {
+    const calls = stubFetch();
+    for await (const _ of jobupScraper.scrape({ sectors: ["finance"], countries: [], zones: [ZONES.zurich] }, () => {})) void _;
+    expect(calls.some((u) => u.includes("Z%C3%BCrich"))).toBe(true);
+    expect(calls.some((u) => u.includes("Zug"))).toBe(true);
+  });
+});
+
