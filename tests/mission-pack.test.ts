@@ -113,7 +113,7 @@ describe("pack de Mission", () => {
       contract_type: "CDI", salary: null, description_html: "<p>Salle des marchés, banque.</p>", description_text: "Salle des marchés, banque.",
       description_status: "ok", posted_at: "2026-10-15", is_vie: false, raw_payload: {},
     });
-    expect(getOffre(id)!.sector).toBe("finance");
+    expect(getOffre(id)!.sector_reason).toMatch(/^Mots-clés/);
     importMissionPack(demoPack());
     expect(getOffre(id)).toMatchObject({ sector: "conseil", sector_reason: "Entreprise cible" });
   });

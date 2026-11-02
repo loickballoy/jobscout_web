@@ -3,7 +3,7 @@
  * Fonction pure, sans dépendance serveur. Ordre de décision :
  *   1. entreprise cible de la Mission (nom égal, ou nom de cible contenu dans celui de l'offre) ;
  *   2. nom connu (lib/scoring/sector-data.ts) ;
- *   3. mots-clés pondérés de l'intitulé (poids doublé) et de la description ;
+ *   3. mots-clés pondérés du nom et de l'intitulé (poids doublé), puis de la description ;
  *   4. sinon « autre ».
  * Une ESN dont la mission se déroule dans une banque reste « conseil » : son nom ou
  * ses mots-clés l'emportent sur le vocabulaire bancaire de la mission. L'assurance
@@ -21,7 +21,7 @@ export const SECTOR_LABELS: Record<Sector, string> = {
 };
 
 /** Change dès que les règles ou les listes changent : toutes les offres sont reclassées au démarrage. */
-export const SECTOR_VERSION = "1";
+export const SECTOR_VERSION = "2";
 
 export function isSector(v: unknown): v is Sector {
   return typeof v === "string" && (SECTORS as readonly string[]).includes(v);
@@ -124,7 +124,8 @@ export function classifySector(input: SectorInput, knownCompanies: KnownCompany[
   const known = matchCompany(key, builtinCompanies());
   if (known) return { sector: known.sector, reason: `Nom connu : ${known.sector === "finance" ? "banque ou finance" : "ESN ou conseil"}` };
 
-  const title = textForKeywords(input.title);
+  // Le nom de l'entreprise (« Banque Exemple », « ESN Démo ») compte comme l'intitulé.
+  const title = textForKeywords(`${input.company ?? ""} ${input.title ?? ""}`);
   const text = textForKeywords((input.description ?? "").slice(0, 4000));
   const fin = keywordScore(title, text, FINANCE_KEYWORDS);
   const con = keywordScore(title, text, CONSEIL_KEYWORDS);
