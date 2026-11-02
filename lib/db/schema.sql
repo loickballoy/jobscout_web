@@ -153,3 +153,61 @@ CREATE TABLE IF NOT EXISTS candidature_events (
   FOREIGN KEY (candidature_id) REFERENCES candidatures(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_candidature_events ON candidature_events(candidature_id, status);
+
+-- Mission (page Mission) : plan importé d'un pack, cases cochées, cibles, journal, audits.
+CREATE TABLE IF NOT EXISTS mission_tasks (
+  id TEXT PRIMARY KEY,
+  phase TEXT NOT NULL,
+  title TEXT NOT NULL,
+  detail TEXT,
+  minutes INTEGER NOT NULL DEFAULT 30,
+  window_start TEXT NOT NULL,
+  window_end TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 2,
+  category TEXT NOT NULL DEFAULT 'admin',
+  done_at TEXT,
+  origin TEXT NOT NULL DEFAULT 'pack',
+  position INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS mission_habit_checks (
+  habit_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  PRIMARY KEY (habit_id, date)
+);
+CREATE TABLE IF NOT EXISTS mission_targets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  company TEXT NOT NULL,
+  company_key TEXT NOT NULL UNIQUE,
+  city TEXT,
+  country TEXT,
+  sector TEXT NOT NULL CHECK (sector IN ('finance', 'conseil')),
+  type TEXT,
+  tier TEXT,
+  cv_cluster TEXT,
+  angle TEXT,
+  contact TEXT,
+  status TEXT NOT NULL DEFAULT 'a_verifier',
+  next_action TEXT,
+  next_date TEXT,
+  notes TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS mission_journal (
+  date TEXT PRIMARY KEY,
+  done TEXT NOT NULL DEFAULT '[]',
+  responses TEXT NOT NULL DEFAULT '[]',
+  energy INTEGER,
+  blocker TEXT,
+  tomorrow TEXT,
+  notes TEXT,
+  weekly_review TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS mission_audits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL DEFAULT (datetime('now')),
+  score INTEGER NOT NULL,
+  total INTEGER NOT NULL,
+  items TEXT NOT NULL
+);

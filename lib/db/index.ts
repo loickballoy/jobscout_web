@@ -32,6 +32,13 @@ export function getDb(): DatabaseSync {
     } catch {}
   }
 
+  // Mission : étape de la réponse reçue (débrief du soir) et nombre de relances faites.
+  for (const column of ["response_stage TEXT", "relance_count INTEGER NOT NULL DEFAULT 0"]) {
+    try {
+      db.exec(`ALTER TABLE candidatures ADD COLUMN ${column}`);
+    } catch {}
+  }
+
   // Secteur de l'employeur (lib/scoring/sector.ts), calculé à l'écriture et au démarrage.
   for (const column of ["sector TEXT", "sector_reason TEXT"]) {
     try {
