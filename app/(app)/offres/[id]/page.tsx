@@ -134,6 +134,7 @@ export default async function OffreDetailPage({ params }: { params: Promise<{ id
             initialFolder={docs.length > 0 ? offreFolderPath(offre.id, offre.company, offre.title) : null}
             canOpenFolder={!isServerMode()}
             templateCluster={templateCluster}
+            templateClusters={cvTemplate ? cvTemplate.clusters.map((c) => ({ id: c.id, name: c.name })) : []}
           />
           {offre.score_breakdown && (
             <section aria-labelledby="score-title" className="glass-panel p-5">

@@ -5,6 +5,7 @@ import { callStructured, type StructuredRequest, type StructuredResult, type Str
 import type { DocLang } from "@/lib/text/lang";
 import { bulletGroup, type CvTemplate } from "./types";
 import { entryLimit, extraSkills, validateSelection, type OffreLike, type Selection } from "./select";
+import { SECTOR_LABELS, isSector } from "@/lib/scoring/sector";
 
 const TOOL: StructuredTool = {
   name: "select_cv",
@@ -74,6 +75,7 @@ export async function aiSelection(t: CvTemplate, offre: OffreLike & { company?: 
 - Intitulé : ${offre.title}
 - Entreprise : ${offre.company ?? ""}
 - Pays : ${offre.country ?? ""}
+- Secteur de l'employeur (indice, les consignes du candidat priment) : ${isSector(offre.sector) ? SECTOR_LABELS[offre.sector] : "inconnu"}
 - Description :
 ${offre.description_text.slice(0, 6000)}
 

@@ -5,7 +5,7 @@ import type { DocLang } from "@/lib/text/lang";
 import { aiSelection, type AiSelectDeps } from "./ai-select";
 import { assembleTemplateCv, type TemplateCvDoc } from "./assemble";
 import { fitTemplateCvToOnePage } from "./render";
-import { autoSelection, type OffreLike, type Selection } from "./select";
+import { autoSelection, forcedSelection, type OffreLike, type Selection } from "./select";
 import type { CvTemplate } from "./types";
 
 export type TemplateCvResult = { doc: TemplateCvDoc; selection: Selection; pdf: Buffer; docx: Buffer };
@@ -15,8 +15,13 @@ export async function chooseSelection(
   t: CvTemplate,
   offre: OffreLike & { company?: string | null },
   lang: DocLang,
-  deps: AiSelectDeps & { aiConfigured?: boolean } = {}
+  deps: AiSelectDeps & { aiConfigured?: boolean; cluster?: string | null } = {}
 ): Promise<{ selection: Selection; notice: string | null }> {
+  // « CV à utiliser » imposé sur la fiche : ni IA ni choix automatique du cluster.
+  if (deps.cluster) {
+    const forced = forcedSelection(t, offre, lang, deps.cluster);
+    if (forced) return { selection: forced, notice: null };
+  }
   const aiConfigured = deps.aiConfigured ?? getLlmConfig().mode !== "unset";
   if (!aiConfigured) return { selection: autoSelection(t, offre, lang), notice: null };
   try {
@@ -31,7 +36,7 @@ export async function generateTemplateCv(
   t: CvTemplate,
   offre: OffreLike & { company?: string | null },
   lang: DocLang,
-  deps: AiSelectDeps & { aiConfigured?: boolean } = {}
+  deps: AiSelectDeps & { aiConfigured?: boolean; cluster?: string | null } = {}
 ): Promise<TemplateCvResult> {
   const { selection, notice } = await chooseSelection(t, offre, lang, deps);
   const assembled = assembleTemplateCv(t, selection, offre, lang);

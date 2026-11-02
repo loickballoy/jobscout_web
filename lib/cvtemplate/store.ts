@@ -60,3 +60,38 @@ export function saveCvTemplate(raw: unknown): { ok: true; template: CvTemplate }
 export function deleteCvTemplate(): void {
   setSetting(SETTING_KEY, DELETED);
 }
+
+const BACKUP_KEY = "cv_template_backup";
+
+export type CvTemplateBackup = { saved_at: string; template: unknown };
+
+/** Sauvegarde prise avant le dernier correctif appliqué, ou null. */
+export function getCvTemplateBackup(): CvTemplateBackup | null {
+  const raw = getSetting(BACKUP_KEY);
+  if (!raw) return null;
+  try {
+    const b = JSON.parse(raw) as CvTemplateBackup;
+    return b && typeof b.saved_at === "string" && b.template ? b : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Enregistre un modèle corrigé après avoir sauvegardé le modèle courant (avec la date). */
+export function saveCvTemplateWithBackup(next: CvTemplate, now = new Date()): void {
+  const current = getSetting(SETTING_KEY);
+  if (current && current !== DELETED)
+    setSetting(BACKUP_KEY, JSON.stringify({ saved_at: now.toISOString(), template: JSON.parse(current) }));
+  setSetting(SETTING_KEY, JSON.stringify(next));
+}
+
+/** Restaure la sauvegarde ; elle devient elle-même le modèle courant (la sauvegarde est consommée). */
+export function restoreCvTemplateBackup(): { ok: true; template: CvTemplate } | { ok: false; errors: string[] } {
+  const backup = getCvTemplateBackup();
+  if (!backup) return { ok: false, errors: ["Aucune version précédente à restaurer."] };
+  const parsed = parseCvTemplate(backup.template);
+  if (!parsed.ok) return parsed;
+  setSetting(SETTING_KEY, JSON.stringify(parsed.template));
+  setSetting(BACKUP_KEY, "");
+  return parsed;
+}

@@ -7,7 +7,13 @@ import { cleanJobTitle } from "@/lib/text/typography";
 import type { DocLang } from "@/lib/text/lang";
 import { bulletGroup, type Bullet, type Cluster, type CvTemplate, type Entry } from "./types";
 
-export type OffreLike = { title: string; description_text: string; country?: string | null };
+export type OffreLike = {
+  title: string;
+  description_text: string;
+  country?: string | null;
+  /** Secteur de l'employeur (lib/scoring/sector.ts) : critère d'appoint du choix du cluster. */
+  sector?: string | null;
+};
 
 export type Selection = {
   cluster: string;
@@ -15,7 +21,8 @@ export type Selection = {
   /** Puces retenues par entrée (ids, dans l'ordre de rendu) ; entrée absente = non rendue. */
   bullets: Record<string, string[]>;
   extraSkills: string[];
-  mode: "auto" | "ai";
+  /** forced : cluster imposé par l'utilisateur (« CV à utiliser »). */
+  mode: "auto" | "ai" | "forced";
   reason?: string;
 };
 
@@ -46,7 +53,18 @@ export function findPlaceholders(text: string): string[] {
 
 // ---------------------------------------------------------------- cluster
 
-export function scoreClusters(t: CvTemplate, offre: OffreLike): { id: string; score: number }[] {
+/** Mot-clé de cluster qui signale le secteur de l'employeur : « finance » ou « ESN ». */
+const SECTOR_KEYWORD: Record<string, string> = { finance: "finance", conseil: "esn" };
+
+/** Le cluster porte-t-il le mot-clé du secteur de l'offre ? */
+export function clusterMatchesSector(c: Cluster, sector: string | null | undefined): boolean {
+  const kw = sector ? SECTOR_KEYWORD[sector] : undefined;
+  return !!kw && c.keywords.some((k) => normalize(k).trim() === kw);
+}
+
+const SECTOR_BONUS = 2;
+
+export function scoreClusters(t: CvTemplate, offre: OffreLike, withSector = true): { id: string; score: number }[] {
   const title = normalize(offre.title);
   const body = normalize(`${offre.title} ${offre.description_text}`);
   const scores = t.clusters.map((c) => {
@@ -57,10 +75,22 @@ export function scoreClusters(t: CvTemplate, offre: OffreLike): { id: string; sc
       if (hasTerm(title, kw)) score += 3;
       else if (hasTerm(body, kw)) score += 1;
     }
+    // Critère d'appoint : un cluster marqué « finance » ou « ESN » gagne quand l'employeur est de ce secteur.
+    if (withSector && clusterMatchesSector(c, offre.sector)) score += SECTOR_BONUS;
     return { id: c.id, score };
   });
   // Tri stable : à égalité, l'ordre du modèle départage (le premier cluster est le défaut).
   return scores.sort((a, b) => b.score - a.score);
+}
+
+/** Pourquoi ce cluster : secteur de l'employeur, mots-clés de l'offre, ou cluster par défaut. */
+export function clusterReason(t: CvTemplate, offre: OffreLike): string {
+  const chosen = pickCluster(t, offre);
+  const withoutSector = scoreClusters(t, offre, false);
+  const top = withoutSector[0];
+  if (clusterMatchesSector(chosen, offre.sector) && (top.id !== chosen.id || top.score === 0)) return "Secteur de l'employeur";
+  if ((withoutSector.find((x) => x.id === chosen.id)?.score ?? 0) > 0) return "Mots-clés de l'offre";
+  return "Cluster par défaut du modèle";
 }
 
 export function pickCluster(t: CvTemplate, offre: OffreLike): Cluster {
@@ -280,6 +310,19 @@ export function autoSelection(t: CvTemplate, offre: OffreLike, lang: DocLang): S
     bullets: selectBullets(t, cluster),
     extraSkills: extraSkills(t, cluster, offre, lang),
     mode: "auto",
+  };
+}
+
+/** Cluster imposé par l'utilisateur : puces et mots-clés choisis sans IA dans ce cluster. Null si le cluster n'existe pas. */
+export function forcedSelection(t: CvTemplate, offre: OffreLike, lang: DocLang, clusterId: string): Selection | null {
+  const cluster = t.clusters.find((c) => c.id === clusterId);
+  if (!cluster) return null;
+  return {
+    cluster: cluster.id,
+    headline: cleanHeadline(offre.title) || (lang === "en" && cluster.headline.en ? cluster.headline.en : cluster.headline.fr),
+    bullets: selectBullets(t, cluster),
+    extraSkills: extraSkills(t, cluster, offre, lang),
+    mode: "forced",
   };
 }
 

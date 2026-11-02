@@ -52,6 +52,9 @@ export function ActionsPanel({
   initialFolder = null,
   canOpenFolder = true,
   templateCluster = null,
+  templateClusters = [],
+  cluster: controlledCluster,
+  onClusterChange,
 }: {
   offreId: number;
   offreUrl: string;
@@ -69,7 +72,15 @@ export function ActionsPanel({
   canOpenFolder?: boolean;
   /** Cluster probable (choix automatique) quand un modèle de CV existe. */
   templateCluster?: { id: string; name: string } | null;
+  /** Clusters du modèle, proposés dans « CV à utiliser ». */
+  templateClusters?: { id: string; name: string }[];
+  /** Cluster imposé ("" = choix automatique), si le parent le partage avec un autre panneau. */
+  cluster?: string;
+  onClusterChange?: (id: string) => void;
 }) {
+  const [ownCluster, setOwnCluster] = useState("");
+  const forcedCluster = controlledCluster ?? ownCluster;
+  const setForcedCluster = onClusterChange ?? setOwnCluster;
   const [docs, setDocs] = useState<DocsState>(initial);
   const [allLoading, setAllLoading] = useState(false);
   const [msgLoading, setMsgLoading] = useState(false);
@@ -99,7 +110,7 @@ export function ActionsPanel({
       const res = await fetch("/api/generate/all", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ offreId }),
+        body: JSON.stringify({ offreId, ...(forcedCluster ? { cluster: forcedCluster } : {}) }),
       });
       // res.ok AVANT res.json() : un corps non-JSON (page HTML d'erreur d'un
       // proxy/edge) ne doit pas masquer le vrai message.
@@ -281,12 +292,26 @@ export function ActionsPanel({
           : "Générer les documents"}
       </Button>
 
+      {templateClusters.length > 0 && (
+        <label className="block text-small">
+          <span className="mb-1 block font-semibold">CV à utiliser</span>
+          <select
+            value={forcedCluster}
+            onChange={(e) => setForcedCluster(e.target.value)}
+            className="h-11 w-full rounded-md border border-border bg-bg px-3 text-small text-text focus:border-accent focus:outline-none"
+          >
+            <option value="">Automatique{templateCluster ? ` (cluster ${templateCluster.id} probable)` : ""}</option>
+            {templateClusters.map((c) => <option key={c.id} value={c.id}>Cluster {c.id} · {c.name}</option>)}
+          </select>
+        </label>
+      )}
+
       {templateCluster && !templateInfo && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface px-3 py-2 text-small">
           <span className="text-textSecondary">
             Modèle CV : cluster probable <span className="font-semibold text-text">{templateCluster.id}</span> · {templateCluster.name}
           </span>
-          <a href={`/api/cv-template/preview?offreId=${offreId}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-accent hover:underline">
+          <a href={`/api/cv-template/preview?offreId=${offreId}${forcedCluster ? `&cluster=${encodeURIComponent(forcedCluster)}` : ""}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-accent hover:underline">
             <Eye className="h-3.5 w-3.5" /> Aperçu
           </a>
         </div>
@@ -296,7 +321,7 @@ export function ActionsPanel({
         <div className="space-y-2 rounded-md border border-border bg-surface px-3 py-2.5 text-small">
           <p className="text-textSecondary">
             CV assemblé depuis votre modèle : cluster <span className="font-semibold text-text">{templateInfo.cluster}</span> · {templateInfo.clusterName}
-            {templateInfo.mode === "ai" ? " (choisi par l'IA)" : " (choix automatique)"}. Titre : « {templateInfo.headline} ».
+            {templateInfo.mode === "ai" ? " (choisi par l'IA)" : templateInfo.mode === "forced" ? " (choisi par vous)" : " (choix automatique)"}. Titre : « {templateInfo.headline} ».
           </p>
           {templateInfo.warnings.length > 0 && (
             <ul className="space-y-1">
