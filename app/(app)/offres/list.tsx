@@ -14,6 +14,7 @@ import { EXTRA_SOURCE_LABELS, SOURCES_META } from "@/lib/sources-meta";
 import { previewExcerpt } from "@/lib/offres/preview";
 import { DISTANCE_RADII, distanceLabel, isApproximate, radiusLabel } from "@/lib/distance/format";
 import { DistanceHomePicker, type HomeCommune } from "@/components/app/distance-home";
+import { SECTOR_FILTERS, SECTOR_FILTER_LABELS, SECTOR_LABELS, type Sector, type SectorFilter } from "@/lib/scoring/sector";
 
 const sourceLabels: Record<string, string> = { ...Object.fromEntries(SOURCES_META.map((source) => [source.id, source.label])), ...EXTRA_SOURCE_LABELS };
 const numberFormat = new Intl.NumberFormat("fr-FR");
@@ -37,7 +38,13 @@ export function OffresList({
   homeSuggestion = null,
   initialZonesOnly = false,
   initialJuniorOnly = false,
+  initialSector = "vises",
+  initialQuery = "",
 }: {
+  /** Filtre « Secteur » de départ (?secteur=…), « Secteurs visés » par défaut. */
+  initialSector?: SectorFilter;
+  /** Recherche de départ (?entreprise=…, lien d'une cible de la Mission). */
+  initialQuery?: string;
   initialResult: OffersSearch;
   /** Zones de recherche configurées : la liste démarre filtrée sur elles. */
   initialZonesOnly?: boolean;
@@ -49,7 +56,8 @@ export function OffresList({
   homeSuggestion?: HomeCommune | null;
 }) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
+  const [sector, setSector] = useState<SectorFilter>(initialSector);
   const [source, setSource] = useState("");
   const [country, setCountry] = useState("");
   // ?vie=1 (carte de l'accueil) coche simplement la puce contrat « V.I.E » : une seule
@@ -75,8 +83,8 @@ export function OffresList({
   const initialVieRef = useRef(initialVieOnly);
   const contractKey = [...contracts].sort().join(",");
   const vieFilter = contracts.has("vie");
-  const hasFilters = !!query || !!source || !!country || contracts.size > 0 || minScore || radius !== null || zonesOnly || juniorOnly;
-  const activeFilterCount = Number(!!source) + Number(!!country) + contracts.size + Number(minScore) + Number(radius !== null) + Number(zonesOnly) + Number(juniorOnly);
+  const hasFilters = !!query || !!source || !!country || contracts.size > 0 || minScore || radius !== null || zonesOnly || juniorOnly || sector !== "vises";
+  const activeFilterCount = Number(!!source) + Number(!!country) + contracts.size + Number(minScore) + Number(radius !== null) + Number(zonesOnly) + Number(juniorOnly) + Number(sector !== "vises");
   const distanceFacets = result.facets.distance;
   const home = distanceFacets.home;
   const { countries, sources, contractCounts } = result.facets;
@@ -98,8 +106,9 @@ export function OffresList({
   // router.refresh() de fin de scan renverrait la liste filtrée du serveur alors que
   // le filtre paraît désactivé.
   useEffect(() => {
-    if ((initialVieOnly && !vieFilter) || (initialMinScore > 0 && !minScore)) router.replace("/offres", { scroll: false });
-  }, [initialVieOnly, vieFilter, initialMinScore, minScore, router]);
+    if ((initialVieOnly && !vieFilter) || (initialMinScore > 0 && !minScore) || (initialSector !== "vises" && sector !== initialSector) || (!!initialQuery && query !== initialQuery))
+      router.replace("/offres", { scroll: false });
+  }, [initialVieOnly, vieFilter, initialMinScore, minScore, initialSector, sector, initialQuery, query, router]);
 
   // Navigation vers /offres?score=N sans quitter la page : on active la puce de score.
   const initialScoreRef = useRef(initialMinScore);
@@ -134,6 +143,7 @@ export function OffresList({
     if (radius !== null && includeUnlocated) params.set("unlocated", "1");
     if (zonesOnly) params.set("zones", "1");
     if (juniorOnly) params.set("junior", "1");
+    if (sector !== "vises") params.set("secteur", sector);
     setLoading(true);
     setError(false);
     const timer = window.setTimeout(async () => {
@@ -154,10 +164,10 @@ export function OffresList({
       }
     }, page > 1 ? 0 : query ? 250 : 0);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [query, source, country, contractKey, minScore, scoreThreshold, sortBy, radius, includeUnlocated, zonesOnly, juniorOnly, page, refreshKey]);
+  }, [query, source, country, contractKey, minScore, scoreThreshold, sortBy, radius, includeUnlocated, zonesOnly, juniorOnly, sector, page, refreshKey]);
 
   function reset() {
-    setQuery(""); setSource(""); setCountry(""); setContracts(new Set()); setMinScore(false); setRadius(null); setIncludeUnlocated(false); setZonesOnly(false); setJuniorOnly(false); setSelectedId(null); setFiltersExpanded(false); setPage(1);
+    setQuery(""); setSource(""); setCountry(""); setContracts(new Set()); setMinScore(false); setRadius(null); setIncludeUnlocated(false); setZonesOnly(false); setJuniorOnly(false); setSector("vises"); setSelectedId(null); setFiltersExpanded(false); setPage(1);
   }
 
   useEffect(() => {
@@ -236,6 +246,9 @@ export function OffresList({
           <select value={source} onChange={(event) => { setSource(event.target.value); setPage(1); }} aria-label="Filtrer par source" className="h-9 max-w-full rounded-md border border-border bg-bg px-3 text-small text-text focus:border-accent focus:outline-none">
             <option value="">Toutes les sources</option>
             {sources.map((item) => <option key={item} value={item}>{sourceLabels[item] ?? item}</option>)}
+          </select>
+          <select value={sector} onChange={(event) => { setSector(event.target.value as SectorFilter); setPage(1); }} aria-label="Filtrer par secteur d'employeur" className="h-9 max-w-full rounded-md border border-border bg-bg px-3 text-small text-text focus:border-accent focus:outline-none">
+            {SECTOR_FILTERS.map((item) => <option key={item} value={item}>{SECTOR_FILTER_LABELS[item]} · {numberFormat.format(sectorFilterCount(item, result.facets.sectors))}</option>)}
           </select>
           <select value={country} onChange={(event) => { setCountry(event.target.value); setPage(1); }} aria-label="Filtrer par pays" className="h-9 max-w-full rounded-md border border-border bg-bg px-3 text-small text-text focus:border-accent focus:outline-none">
             <option value="">Tous les pays</option>
@@ -332,6 +345,25 @@ function OfferRow({ offer, selected, onSelect }: { offer: OffreSummary; selected
   );
 }
 
+/** Comptes du menu « Secteur » : chaque option croisée avec les autres filtres. */
+function sectorFilterCount(item: SectorFilter, facets: { counts: Record<Sector, number>; targets: Sector[] }): number {
+  const all = facets.counts.finance + facets.counts.conseil + facets.counts.autre;
+  if (item === "tous") return all;
+  if (item === "vises") return facets.targets.reduce((n, s) => n + facets.counts[s], 0);
+  return facets.counts[item];
+}
+
+/** Secteur de l'employeur, avec sa justification au survol et pour les lecteurs d'écran. */
+export function SectorBadge({ offer }: { offer: Pick<OffreSummary, "sector" | "sector_reason"> }) {
+  if (!offer.sector) return null;
+  const label = SECTOR_LABELS[offer.sector];
+  return (
+    <Badge variant={offer.sector === "autre" ? "default" : "info"} title={offer.sector_reason ?? undefined} aria-label={offer.sector_reason ? `${label} (${offer.sector_reason})` : label}>
+      {label}
+    </Badge>
+  );
+}
+
 function OfferRowContent({ offer }: { offer: OffreSummary }) {
   const score = scoreColor(offer.score ?? 0);
   return (
@@ -349,6 +381,7 @@ function OfferRowContent({ offer }: { offer: OffreSummary }) {
         <span className="mt-3 flex flex-wrap items-center gap-1.5">
           {offer.posted_at && <span className="mr-1 text-caption text-textSecondary">{formatRelativeDate(offer.posted_at)}</span>}
           <Badge>{sourceLabels[offer.source] ?? offer.source}</Badge>
+          <SectorBadge offer={offer} />
           {offer.contract_category !== "autre" && <Badge variant={offer.contract_category === "vie" ? "info" : "default"}>{CONTRACT_LABELS[offer.contract_category]}</Badge>}
           {seniorityLabel({ level: offer.seniority, years: offer.seniority_years }) && (
             <Badge variant={offer.seniority === "junior" ? "success" : offer.seniority === "senior" ? "danger" : "warning"}>
@@ -372,8 +405,9 @@ function OfferPreview({ offer }: { offer: OffreSummary }) {
     <aside aria-label={`Aperçu : ${offer.title}`} className="glass-panel focus-card page-enter sticky top-6 hidden p-6 xl:block">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="eyebrow"><span className="signal-dot !h-1 !w-1" aria-hidden="true" />Aperçu de l’offre</span>
-        <Badge>{sourceLabels[offer.source] ?? offer.source}</Badge>
+        <span className="flex flex-wrap gap-1.5"><SectorBadge offer={offer} /><Badge>{sourceLabels[offer.source] ?? offer.source}</Badge></span>
       </div>
+      {offer.sector_reason && <p className="mt-2 text-caption text-textSecondary">Secteur : {offer.sector_reason}</p>}
       <div className="mt-6 flex items-start gap-4">
         <div className="min-w-0 flex-1">
           <p className="text-small font-semibold text-accent">{offer.company || "Entreprise non précisée"}</p>

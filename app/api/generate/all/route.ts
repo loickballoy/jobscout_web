@@ -22,7 +22,9 @@ export const maxDuration = 180;
  */
 export async function POST(req: NextRequest) {
   try {
-    const { offreId } = await req.json();
+    const { offreId, cluster } = (await req.json()) as { offreId: unknown; cluster?: unknown };
+    // « CV à utiliser » (fiche d'offre) : cluster imposé, sinon choix automatique ou IA.
+    const forcedCluster = typeof cluster === "string" && cluster.trim() ? cluster.trim() : null;
     const profile = getProfile();
     if (!profile) return NextResponse.json({ error: "Profil introuvable" }, { status: 400 });
     const offre = getOffre(Number(offreId));
@@ -47,7 +49,7 @@ export async function POST(req: NextRequest) {
     const cvTask = async (): Promise<{ pdfId: number; docxId: number; facts?: string }> => {
       if (template) {
         // CV assemblé depuis le modèle maître : textes de l'utilisateur, aucune rédaction IA.
-        const r = await generateTemplateCv(template, offre, lang);
+        const r = await generateTemplateCv(template, offre, lang, { cluster: forcedCluster });
         const pdfDoc = saveDocument({ type: "cv", offreId: offre.id, format: "pdf", buffer: r.pdf, meta });
         const docxDoc = saveDocument({ type: "cv", offreId: offre.id, format: "docx", buffer: r.docx, meta });
         templateInfo = {

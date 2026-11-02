@@ -3,7 +3,7 @@ import { getCvTemplate } from "@/lib/cvtemplate/store";
 import { clusterSelection } from "@/lib/cvtemplate/inspect";
 import { assembleTemplateCv } from "@/lib/cvtemplate/assemble";
 import { fitTemplateCvToOnePage } from "@/lib/cvtemplate/render";
-import { autoSelection } from "@/lib/cvtemplate/select";
+import { autoSelection, forcedSelection } from "@/lib/cvtemplate/select";
 import { getOffre } from "@/lib/db/offres";
 import { detectDocLanguage, sourceLanguageHint, type DocLang } from "@/lib/text/lang";
 
@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 
 /**
  * Aperçu PDF sans IA ni enregistrement : `?cluster=B&lang=fr` (CV du cluster,
- * titre par défaut) ou `?offreId=12` (choix automatique pour cette offre).
+ * titre par défaut) ou `?offreId=12` (choix automatique pour cette offre, ou
+ * `&cluster=B` pour le cluster imposé sur la fiche).
  */
 export async function GET(req: NextRequest) {
   const t = getCvTemplate();
@@ -24,7 +25,8 @@ export async function GET(req: NextRequest) {
     const offre = getOffre(offreId);
     if (!offre) return NextResponse.json({ error: "Offre introuvable" }, { status: 404 });
     const lang = detectDocLanguage(offre.title, offre.description_text, sourceLanguageHint(offre.source, offre.raw_payload), offre.country);
-    doc = assembleTemplateCv(t, autoSelection(t, offre, lang), offre, lang);
+    const forced = sp.get("cluster") ? forcedSelection(t, offre, lang, sp.get("cluster") ?? "") : null;
+    doc = assembleTemplateCv(t, forced ?? autoSelection(t, offre, lang), offre, lang);
   } else {
     const lang: DocLang = sp.get("lang") === "en" ? "en" : "fr";
     const country = (sp.get("country") ?? "").toUpperCase() || null;

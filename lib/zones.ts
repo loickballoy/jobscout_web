@@ -8,13 +8,13 @@
  *   aussi, et France Travail est interrogé sur ces départements.
  * - `linkedin` / `talent` : lieux passés aux recherches de ces sites.
  */
-export type ZoneId = "paris" | "lyon" | "romandie" | "belgique";
+export type ZoneId = "paris" | "lyon" | "romandie" | "zurich" | "belgique" | "luxembourg" | "paysbas";
 
 export type Zone = {
   id: ZoneId;
   label: string;
   /** Code ISO du pays. */
-  country: "FR" | "CH" | "BE";
+  country: "FR" | "CH" | "BE" | "LU" | "NL";
   centers: { name: string; lat: number; lng: number }[];
   radiusKm: number;
   departements: string[];
@@ -62,6 +62,19 @@ export const ZONES: Record<ZoneId, Zone> = {
     linkedin: ["Geneva, Switzerland", "Lausanne, Vaud, Switzerland", "Neuchâtel, Switzerland", "Fribourg, Switzerland", "Sion, Valais, Switzerland"],
     talent: ["Genève", "Lausanne", "Neuchâtel", "Fribourg", "Sion"],
   },
+  zurich: {
+    id: "zurich",
+    label: "Zurich et Zoug",
+    country: "CH",
+    centers: [
+      { name: "Zurich", lat: 47.3769, lng: 8.5417 },
+      { name: "Zoug", lat: 47.1662, lng: 8.5155 },
+    ],
+    radiusKm: 20,
+    departements: [],
+    linkedin: ["Zurich, Switzerland", "Zug, Switzerland"],
+    talent: ["Zürich", "Zug"],
+  },
   // Partie francophone : Bruxelles et Wallonie (la Flandre demande le néerlandais).
   belgique: {
     id: "belgique",
@@ -80,6 +93,40 @@ export const ZONES: Record<ZoneId, Zone> = {
     departements: [],
     linkedin: ["Brussels, Brussels Region, Belgium", "Namur, Walloon Region, Belgium", "Charleroi, Walloon Region, Belgium", "Mons, Walloon Region, Belgium", "Liège, Walloon Region, Belgium"],
     talent: ["Bruxelles", "Wavre", "Namur", "Charleroi", "Mons", "Liège"],
+  },
+  luxembourg: {
+    id: "luxembourg",
+    label: "Luxembourg",
+    country: "LU",
+    centers: [
+      { name: "Luxembourg", lat: 49.6116, lng: 6.1319 },
+      { name: "Esch-sur-Alzette", lat: 49.4958, lng: 5.9806 },
+    ],
+    radiusKm: 25,
+    departements: [],
+    linkedin: ["Luxembourg"],
+    talent: ["Luxembourg"],
+  },
+  // Talent.com n'a pas de site néerlandais : la liste reste vide, LinkedIn seul cherche ces villes.
+  paysbas: {
+    id: "paysbas",
+    label: "Pays-Bas (Randstad)",
+    country: "NL",
+    centers: [
+      { name: "Amsterdam", lat: 52.3676, lng: 4.9041 },
+      { name: "Rotterdam", lat: 51.9244, lng: 4.4777 },
+      { name: "Utrecht", lat: 52.0907, lng: 5.1214 },
+      { name: "La Haye", lat: 52.0705, lng: 4.3007 },
+    ],
+    radiusKm: 20,
+    departements: [],
+    linkedin: [
+      "Amsterdam, North Holland, Netherlands",
+      "Rotterdam, South Holland, Netherlands",
+      "Utrecht, Utrecht, Netherlands",
+      "The Hague, South Holland, Netherlands",
+    ],
+    talent: [],
   },
 };
 

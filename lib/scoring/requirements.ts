@@ -54,8 +54,8 @@ export const IMPORTANCE_WEIGHT: Record<Importance, number> = { key: 3, normal: 1
 
 export type Requirement = { label: string; variants: string[]; importance: Importance; covered: boolean };
 
-const OPTIONAL = /\b(un plus|serait un plus|est un plus|apprecie|appreciee|appreciees|apprecies|souhaite|souhaitee|souhaitable|idealement|bonus|nice to have|a plus|is a plus|preferred|appreciated|optionnel|optional)\b/;
-const REQUIRED = /\b(indispensable|obligatoire|requis|requise|exige|exigee|imperati(f|ve)|maitrise de|maitrise du|maitrise des|maitriser|must|required|mandatory|strong (knowledge|experience|skills))\b/;
+export const OPTIONAL = /\b(un plus|serait un plus|est un plus|apprecie|appreciee|appreciees|apprecies|souhaite|souhaitee|souhaitable|idealement|bonus|nice to have|a plus|is a plus|preferred|appreciated|optionnel|optional)\b/;
+export const REQUIRED = /\b(indispensable|obligatoire|requis|requise|exige|exigee|imperati(f|ve)|maitrise de|maitrise du|maitrise des|maitriser|must|required|mandatory|strong (knowledge|experience|skills))\b/;
 
 /** Positions (dans le texte normalisé) où apparaît l'une des variantes. */
 function positions(raw: string, norm: string, variants: string[]): number[] {

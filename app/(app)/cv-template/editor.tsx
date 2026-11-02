@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import type { CvTemplate } from "@/lib/cvtemplate/types";
 import { setAtPath, type TemplateText } from "@/lib/cvtemplate/inspect";
+import { PatchPanel } from "./patch-panel";
 
 type Status = { text: string; error?: boolean; details?: string[] } | null;
 
@@ -79,6 +80,17 @@ export function TemplateEditor({
     } finally {
       setBusy(null);
     }
+  }
+
+  /** Après un correctif ou une restauration : relit le modèle enregistré. */
+  async function reload() {
+    const data = await fetch("/api/cv-template", { cache: "no-store" }).then((r) => r.json()).catch(() => null);
+    if (!data?.template) return;
+    setTemplate(data.template);
+    setPlaceholders(data.placeholders ?? []);
+    setMissingEn(data.missingEnglish ?? []);
+    setJson(JSON.stringify(data.template, null, 2));
+    setEdits({});
   }
 
   function saveJson() {
@@ -214,6 +226,8 @@ export function TemplateEditor({
           </table>
         </div>
       </Card>
+
+      <PatchPanel onChanged={reload} />
 
       <Card>
         <div className="flex items-center gap-2">

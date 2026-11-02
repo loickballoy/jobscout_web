@@ -9,6 +9,8 @@ import type { ScoreResult } from "@/lib/ai/score-offre";
 import { classifyContract, CONTRACT_ORDER, type ContractCategory } from "@/lib/contracts";
 import { fixMojibake, sanitizeScrapedOffre } from "@/lib/offres/clean-text";
 import { ensureOffresRepaired } from "./repair-markup";
+import { writeOffreSector } from "@/lib/sector-store";
+import type { Sector } from "@/lib/scoring/sector";
 
 export type { ScrapedOffre };
 
@@ -42,6 +44,9 @@ export type OffreRow = {
   is_vie: number;
   raw_payload: string | null;
   scrape_errors: string | null;
+  /** Secteur de l'employeur (lib/scoring/sector.ts) et sa justification. */
+  sector: Sector | null;
+  sector_reason: string | null;
 };
 
 export type OffreFiltered = OffreRow & {
@@ -71,6 +76,8 @@ export type OffreSummary = Pick<
   /** Niveau demandé (lib/seniority) et années d'expérience exigées, si l'offre les dit. */
   seniority: Seniority;
   seniority_years: number | null;
+  sector: Sector | null;
+  sector_reason: string | null;
 };
 
 export type OffersSort = "smart" | "newest" | "oldest" | "score" | "distance";
@@ -102,7 +109,13 @@ export type OffersSearch = {
   offers: OffreSummary[];
   total: number;
   pageSize: number;
-  facets: BaseFacets & { distance: DistanceFacets; zones: { labels: string[]; count: number }; junior: { count: number } };
+  facets: BaseFacets & {
+    distance: DistanceFacets;
+    zones: { labels: string[]; count: number };
+    junior: { count: number };
+    /** Offres de chaque secteur parmi celles qui passent les autres filtres ; `targets` = secteurs visés du profil. */
+    sectors: { counts: Record<Sector, number>; targets: Sector[] };
+  };
 };
 
 const OFFER_PAGE_SIZE = 24;
@@ -175,7 +188,7 @@ function dbFingerprint(): string {
 type CacheRow = Pick<
   OffreRow,
   "id" | "source" | "url" | "title" | "company" | "country" | "location" |
-  "contract_type" | "description_status" | "posted_at" | "score" | "is_vie"
+  "contract_type" | "description_status" | "posted_at" | "score" | "is_vie" | "sector" | "sector_reason"
 > & { head: string | null; excerpt: string | null; score_breakdown: string | null; has_cv: number; has_lm: number; geo_hint: unknown; geo_dep: string | null };
 
 function buildOffresCache(fingerprint: string): OffresCache {
@@ -185,6 +198,7 @@ function buildOffresCache(fingerprint: string): OffresCache {
   const rows = getDb().prepare(`
     SELECT o.id, o.source, o.url, o.title, o.company, o.country, o.location,
       o.contract_type, o.description_status, o.posted_at, o.score, o.score_breakdown, o.is_vie,
+      o.sector, o.sector_reason,
       substr(o.description_text, 1, 4000) AS head,
       substr(o.description_text, 1, 1000) AS excerpt,
       EXISTS(SELECT 1 FROM documents WHERE offre_id = o.id AND type = 'cv') AS has_cv,
@@ -228,6 +242,7 @@ function buildOffresCache(fingerprint: string): OffresCache {
       excerpt: (row.excerpt ?? "").slice(0, 1000), score_breakdown: row.score_breakdown,
       geo_lat: geo.lat, geo_lng: geo.lng, geo_code: geo.lat !== null ? geo.code ?? null : null,
       geo_label: geo.label, geo_precision: geo.precision,
+      sector: (row.sector as Sector | null) ?? null, sector_reason: row.sector_reason ?? null,
       geo_unlocated_fr: geo.lat === null && (geo.country ? geo.country === "FR" : countryKey === "" || countryKey === "france"),
       ...(() => {
         const r = classifySeniority(row.title, row.head ?? "");
@@ -327,6 +342,10 @@ export function searchOffres(opts: {
   zonesOnly?: boolean;
   /** Ne garder que les postes accessibles à un jeune diplômé (junior ou niveau non précisé). */
   juniorOnly?: boolean;
+  /** Secteurs d'employeur gardés ; absent = tous. Une offre pas encore classée compte comme « autre ». */
+  sectors?: Sector[] | null;
+  /** Secteurs visés du profil, renvoyés dans les facettes (option « Secteurs visés »). */
+  targetSectors?: Sector[];
   page?: number;
 } = {}): OffersSearch {
   const cache = getOffresCache();
@@ -394,11 +413,17 @@ export function searchOffres(opts: {
     }
   }
   const radius = home && typeof opts.radiusKm === "number" && opts.radiusKm >= 0 ? opts.radiusKm : null;
-  const inRadius = radius === null ? zoned : zoned.filter((row) => {
+  const placed = radius === null ? zoned : zoned.filter((row) => {
     const km = distances.get(row.id);
     if (km === null || km === undefined) return !!opts.includeUnlocated && row.geo_unlocated_fr;
     return sameCity.has(row.id) || (radius > 0 && roundKm(km) <= radius);
   });
+
+  // Secteur : comptes de chaque option croisés avec tous les autres filtres, puis filtre.
+  const sectorCounts: Record<Sector, number> = { finance: 0, conseil: 0, autre: 0 };
+  for (const row of placed) sectorCounts[row.sector ?? "autre"]++;
+  const sectorSet = opts.sectors ? new Set(opts.sectors) : null;
+  const inSector = sectorSet ? placed.filter((row) => sectorSet.has(row.sector ?? "autre")) : placed;
 
   // Tris stables : les ex æquo gardent l’ordre intelligent, lui-même départagé par id.
   if (opts.sortBy === "distance" && home) {
@@ -407,7 +432,7 @@ export function searchOffres(opts: {
     // répéterait des offres.
     // « Dans votre ville » d'abord (un arrondissement peut être à 6 km du centre de la ville),
     // puis les distances : une offre connue au seul département ne s'intercale pas dans la ville.
-    inRadius.sort((a, b) => {
+    inSector.sort((a, b) => {
       const sa = sameCity.has(a.id);
       const sb = sameCity.has(b.id);
       if (sa || sb) return Number(sb) - Number(sa);
@@ -417,17 +442,17 @@ export function searchOffres(opts: {
       return da - db;
     });
   }
-  if (opts.sortBy === "score") inRadius.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-  if (opts.sortBy === "newest") inRadius.sort((a, b) => compareText(b.posted_at ?? "", a.posted_at ?? ""));
+  if (opts.sortBy === "score") inSector.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  if (opts.sortBy === "newest") inSector.sort((a, b) => compareText(b.posted_at ?? "", a.posted_at ?? ""));
   if (opts.sortBy === "oldest") {
     // Dates inconnues en fin de liste, comme en 3.4.10.
-    inRadius.sort((a, b) => {
+    inSector.sort((a, b) => {
       if (!a.posted_at || !b.posted_at) return Number(!a.posted_at) - Number(!b.posted_at);
       return compareText(a.posted_at, b.posted_at);
     });
   }
   const page = Math.max(1, Math.min(10000, Math.trunc(opts.page ?? 1) || 1));
-  const visible = inRadius.slice((page - 1) * OFFER_PAGE_SIZE, page * OFFER_PAGE_SIZE);
+  const visible = inSector.slice((page - 1) * OFFER_PAGE_SIZE, page * OFFER_PAGE_SIZE);
   return {
     offers: visible.map((row) => ({
       id: row.id, source: row.source, url: row.url, title: row.title,
@@ -443,8 +468,9 @@ export function searchOffres(opts: {
       same_dept: sameDept.has(row.id),
       geo_label: row.geo_label, geo_precision: row.geo_precision,
       seniority: row.seniority, seniority_years: row.seniority_years,
+      sector: row.sector, sector_reason: row.sector_reason,
     })),
-    total: inRadius.length,
+    total: inSector.length,
     pageSize: OFFER_PAGE_SIZE,
     // Pays, sources et contrats de toute la base ; comptes du menu « Distance » sur les offres filtrées.
     facets: {
@@ -455,6 +481,7 @@ export function searchOffres(opts: {
       },
       zones: { labels: zones.map((z) => z.label), count: zoneCount },
       junior: { count: juniorCount },
+      sectors: { counts: sectorCounts, targets: opts.targetSectors ?? ["finance", "conseil", "autre"] },
     },
   };
 }
@@ -528,6 +555,7 @@ export function upsertOffreFromSource(source: string, o: ScrapedOffre): number {
   const row = db
     .prepare("SELECT id FROM offres WHERE source = ? AND source_id = ?")
     .get(source, o.source_id) as { id: number } | undefined;
+  if (row) writeOffreSector(row.id, c);
   return row?.id ?? 0;
 }
 

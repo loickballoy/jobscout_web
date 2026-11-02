@@ -102,11 +102,11 @@ export default async function DashboardPage() {
       </section>
 
       <section aria-label="Chiffres clés" className="reveal-panel reveal-delay-1 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-        <Metric icon={Briefcase} label="Offres disponibles" value={counts.total} detail={`${counts.today.toLocaleString("fr-FR")} publiée${counts.today > 1 ? "s" : ""} aujourd'hui`} href="/offres" />
+        <Metric icon={Briefcase} label="Offres disponibles" value={counts.total} detail={`${counts.today.toLocaleString("fr-FR")} publiée${counts.today > 1 ? "s" : ""} aujourd'hui`} href="/offres?secteur=tous" />
         <Metric icon={Send} label="Candidatures" value={candCounts.total} detail={candCounts.upcoming ? `${plural(candCounts.upcoming, "échéance")} à venir` : "Aucune échéance à venir"} href="/candidatures" />
         {wantsVie
-          ? <Metric icon={Globe} label="V.I.E" value={thirdFigure.total} detail={`dont ${thirdFigure.recent.toLocaleString("fr-FR")} publié${thirdFigure.recent > 1 ? "s" : ""} ces 7 derniers jours`} href="/offres?vie=1" />
-          : <Metric icon={Gauge} label={`Offres à ${HIGH_SCORE} et plus`} value={thirdFigure.total} detail={`dont ${thirdFigure.recent.toLocaleString("fr-FR")} publiée${thirdFigure.recent > 1 ? "s" : ""} ces 7 derniers jours`} href={`/offres?score=${HIGH_SCORE}`} />}
+          ? <Metric icon={Globe} label="V.I.E" value={thirdFigure.total} detail={`dont ${thirdFigure.recent.toLocaleString("fr-FR")} publié${thirdFigure.recent > 1 ? "s" : ""} ces 7 derniers jours`} href="/offres?vie=1&secteur=tous" />
+          : <Metric icon={Gauge} label={`Offres à ${HIGH_SCORE} et plus`} value={thirdFigure.total} detail={`dont ${thirdFigure.recent.toLocaleString("fr-FR")} publiée${thirdFigure.recent > 1 ? "s" : ""} ces 7 derniers jours`} href={`/offres?score=${HIGH_SCORE}&secteur=tous`} />}
       </section>
 
       <div className="reveal-panel reveal-delay-2 grid items-start gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(290px,0.85fr)]">

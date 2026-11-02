@@ -114,11 +114,12 @@ const LANG_PROFILE_ALIASES: Record<string, string[]> = {
   de: ["allemand", "german", "deutsch"],
   it: ["italien", "italian", "italiano"],
   pt: ["portugais", "portuguese", "portugues", "português"],
+  nl: ["néerlandais", "neerlandais", "dutch", "nederlands"],
 };
 
 const PROFICIENT_LEVELS = /\b(c2|c1|b2|courant|fluent|bilingue|bilingual|natif|native|maternelle|mother)\b/i;
 
-function detectOfferLanguage(title: string, description: string): string {
+export function detectOfferLanguage(title: string, description: string): string {
   const text = `${title}\n${description}`;
   let bestLang = "fr";
   let bestCount = 0;
@@ -133,7 +134,7 @@ function detectOfferLanguage(title: string, description: string): string {
   return bestLang;
 }
 
-function userMastersLanguage(profileLanguages: Language[], iso: string): boolean {
+export function userMastersLanguage(profileLanguages: Language[], iso: string): boolean {
   const aliases = LANG_PROFILE_ALIASES[iso] ?? [];
   for (const l of profileLanguages) {
     const name = normalize(l.name ?? "");

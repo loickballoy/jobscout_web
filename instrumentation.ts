@@ -17,5 +17,12 @@ export async function register() {
     } catch (e) {
       console.log(`[scoring] recalcul au démarrage impossible : ${e instanceof Error ? e.message : String(e)}`);
     }
+    // Règles de secteur modifiées : les offres sont reclassées une fois.
+    const { reclassifyIfOutdated } = await import("@/lib/sector-store");
+    try {
+      reclassifyIfOutdated();
+    } catch (e) {
+      console.log(`[secteur] classement au démarrage impossible : ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 }
