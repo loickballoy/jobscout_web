@@ -124,13 +124,123 @@ Cascade selon le type de fichier : PDF (`pdf-parse` ou `pdfjs-dist` multi-colonn
 
 Page **Modèle CV** : un CV « maître » en JSON (clusters de postes, banque de puces étiquetées, blocs de compétences, FR et EN). S'il existe, chaque CV est **assemblé** à partir de vos textes au lieu d'être rédigé : l'IA (ou, sans clé, un choix par mots-clés) choisit le cluster, l'intitulé exact de l'offre, les puces et jusqu'à 5 mots-clés de l'annonce déjà présents dans vos compétences ; le code vérifie chaque choix (une seule version par fait, limites par entrée). La lettre de motivation ne s'appuie que sur les faits de ce CV. Les emplacements non remplis (`[N]`, `[mois]`) sont signalés à chaque génération. Un fichier `cv-template.json` déposé dans le dossier de données est importé au premier accès (`lib/cvtemplate`).
 
+### Correctifs du modèle de CV
+
+Modèle CV › **Appliquer un correctif** : collez ou chargez un correctif JSON, **Prévisualisez** (résumé, erreurs, crochets restants), puis **Appliquez**. Les opérations s'appliquent dans l'ordre sur une copie du modèle ; une référence introuvable ou un modèle obtenu invalide affiche les erreurs (numéro et nom de l'opération) et rien n'est enregistré. Le modèle d'avant est sauvegardé : **Restaurer la version précédente** le rétablit (`lib/cvtemplate/patch.ts`, `POST /api/cv-template/patch` avec `{ patch, dryRun }`, `POST /api/cv-template/restore`).
+
+| `op` | Champs | Effet |
+|---|---|---|
+| `remove_clusters` | `ids` | Supprime ces clusters, les retire des puces ; une puce sans cluster est supprimée et retirée des `priority` |
+| `update_clusters` | `id`, `add_titles?`, `add_keywords?`, `headline?`, `profile?`, `skills?` | Ajoute des intitulés et mots-clés sans doublon ; remplace les autres champs |
+| `add_clusters` | `clusters` | Ajoute, ou remplace le cluster de même id |
+| `add_entries` | `items: [{ section, position?, entry }]` | Insère l'entrée, ou remplace celle de même id à sa place |
+| `add_bullets` | `items: [{ entry, bullet }]` | Ajoute la puce, ou remplace celle de même id |
+| `add_clusters_to_bullets` | `items: [{ bullet, clusters }]` | Ajoute des clusters à une puce |
+| `set_entry_meta` | `items: [{ entry, meta }]` | Remplace les dates et détails d'une entrée |
+| `set_section_titles` | `items: [{ section, title }]` | Remplace le titre d'une section |
+| `set_taglines` | `taglines` | Remplace les lignes sous le contact |
+| `set_instructions` | `text` | Remplace les consignes pour l'IA |
+
+```json
+{
+  "type": "jobscout-cv-patch",
+  "version": 1,
+  "description": "Ajouter un cluster finance",
+  "operations": [
+    { "op": "update_clusters", "id": "E", "add_titles": "Consultant IT", "add_keywords": ["ESN"] },
+    { "op": "add_bullets", "items": [{ "entry": "projet-demo", "bullet": { "id": "D1-F", "clusters": ["F"], "text": { "fr": "Moteur d'appariement testé par invariants.", "en": "Matching engine tested with invariants." } } }] },
+    { "op": "set_entry_meta", "items": [{ "entry": "projet-demo", "meta": { "fr": "2026", "en": "2026" } }] }
+  ]
+}
+```
+
+Sur une fiche d'offre, **CV à utiliser** impose un cluster (sinon : choix automatique, ou IA si elle est configurée). Le secteur de l'employeur aide le choix automatique : un cluster dont les mots-clés contiennent « finance » ou « ESN » gagne quand l'employeur est de ce secteur ; il est aussi transmis à l'IA comme indice, après les consignes du modèle.
+
 ## Zones de recherche
 
-Profil › **Zones de recherche** : Paris et Île-de-France, Lyon et agglomération, Suisse romande, Belgique (Bruxelles et Wallonie). Le scan interroge ces lieux (France Travail par département, LinkedIn et Talent.com par ville) et la page Offres s'ouvre filtrée sur « Mes zones » (`lib/zones.ts`).
+Profil › **Zones de recherche** (toutes décochées par défaut). Le scan interroge ces lieux au lieu du pays entier et la page Offres s'ouvre filtrée sur « Mes zones » (`lib/zones.ts`).
+
+| Zone | Pays | Centres (rayon) | LinkedIn | Talent.com |
+|---|---|---|---|---|
+| Paris et Île-de-France | FR | Paris (45 km) + départements 75, 77, 78, 91, 92, 93, 94, 95 | Île-de-France | Paris |
+| Lyon et agglomération | FR | Lyon (30 km) + département 69 | Lyon | Lyon |
+| Suisse romande | CH | Genève, Nyon, Lausanne, Montreux, Yverdon, Neuchâtel, Fribourg, Sion (20 km) | 5 villes | 5 villes |
+| Zurich et Zoug | CH | Zurich, Zoug (20 km) | Zurich, Zug | Zürich, Zug |
+| Belgique (Bruxelles et Wallonie) | BE | Bruxelles, Wavre, Louvain-la-Neuve, Namur, Charleroi, Mons, Liège (20 km) | 5 villes | 6 villes |
+| Luxembourg | LU | Luxembourg, Esch-sur-Alzette (25 km) | Luxembourg | Luxembourg (lu.talent.com) |
+| Pays-Bas (Randstad) | NL | Amsterdam, Rotterdam, Utrecht, La Haye (20 km) | 4 villes | aucune (pas de site néerlandais) |
+
+France Travail interroge les départements des zones françaises ; jobup.ch, les villes des zones suisses.
+
+## Secteur de l'employeur
+
+Chaque offre est classée **Banque & finance**, **ESN & conseil** ou **Autre secteur** (`lib/scoring/sector.ts`, sans IA), dans cet ordre :
+
+1. entreprise cible de la Mission (nom normalisé égal, ou nom de la cible contenu dans celui de l'offre) ;
+2. nom connu (`lib/scoring/sector-data.ts` : banques de France, de Suisse et du Benelux, infrastructures de marché, éditeurs financiers, paiement, négoce ; ESN, cabinets de conseil et Big 4) ;
+3. mots-clés pondérés en français, anglais et néerlandais, dans le nom de l'entreprise et l'intitulé (poids double) puis la description ;
+4. sinon « Autre secteur ».
+
+Une ESN en mission chez une banque reste « ESN & conseil » ; l'assurance seule n'est pas de la finance. La justification (« Entreprise cible », « Nom connu : banque ou finance », « Mots-clés : banque, salle des marchés ») s'affiche au survol du badge, dans l'aperçu et sur la fiche. Le classement est enregistré avec l'offre, refait au démarrage quand les règles changent (`SECTOR_VERSION`) et après chaque modification des cibles.
+
+Profil › **Secteurs d'employeur visés** (les trois par défaut). Page Offres : filtre **Secteur** (Secteurs visés, chaque secteur, Tous), avec le nombre d'offres de chaque option croisé avec les autres filtres, et paramètre d'URL `?secteur=vises|finance|conseil|autre|tous`. Les cartes de l'accueil ouvrent la page sur `?secteur=tous`, pour que leurs chiffres concordent.
 
 ## Niveau de poste
 
 Profil › **Niveau de poste** › « Postes junior uniquement » : niveau de chaque offre déduit localement (intitulé « Senior », « Lead », « Junior » ; « 5 ans d'expérience », « 3+ years » ; champ « Débutant accepté » de France Travail), filtre « Junior » de la page Offres actif d'office, retrait au score selon l'écart d'expérience (voir Scoring), recherche LinkedIn sur « Entry level » et « Associate » (`lib/seniority.ts`).
+
+## Préparer la candidature
+
+Sur chaque fiche d'offre, avant la génération des documents :
+
+- **Verdict** Go, À vérifier ou No-go, ligne par ligne : secteur (visé et différent de « Autre », sinon No-go), lieu (zone active ou V.I.E, sinon À vérifier), niveau (junior, V.I.E, stage ou au plus 2 ans : OK ; 3 à 4 ans : À vérifier ; 5 ans et plus ou poste senior : No-go), langue (allemand ou néerlandais exigé et non maîtrisé : No-go ; souhaité : À vérifier), contrat (hors de vos contrats recherchés : À vérifier) — `lib/mission/verdict.ts` ;
+- **CV** : cluster retenu et sa raison (secteur, mots-clés), avec le sélecteur « CV à utiliser » ;
+- **Contact** (nom, rôle, lien) : crée la cible de l'entreprise (secteur de l'offre, statut « À contacter ») ou met à jour son contact ;
+- **Message court** à ce contact : 4 phrases au plus, dans la langue de l'offre — le poste, le fait du CV maître le plus proche du besoin, un lien réel avec l'entreprise (sinon rien), une demande simple ; aucun fait absent du modèle ou du profil, mêmes contrôles et relecture que la lettre (`POST /api/generate/msg` avec `mode: "contact"` ; le message V.I.E est inchangé) ;
+- **Ajouter au suivi** : candidature envoyée, avec le contact et les documents ; la cible passe à « Candidature », prochaine action « Relance » à J+7.
+
+## Mission
+
+Page **Mission** (en tête du menu) : le plan d'une campagne de recherche, importé d'un **pack** JSON. Sans pack, la page est vide et renvoie vers l'import. En tête : date, phase, « J-x avant » l'échéance, bannière pendant le gel, bouton **Brief** (Markdown affiché sans HTML).
+
+- **Aujourd'hui** : « Si tu ne fais qu'une chose », liste du jour à cocher (durées, catégories), barre minutes prévues / budget, relances dues (« Relance faite »), trois offres à traiter, « Si tu as du temps ». Le plan vient de `buildDay` (`lib/mission/today.ts`, fonction pure) : habitudes du jour réservées d'abord, relances dues (envoyée depuis 7 jours, dernière relance il y a 7 jours ou plus, 10 min, 5 par jour au plus), tâches en retard (jamais masquées), tâches de la fenêtre du jour, puis le reste dans « Si tu as du temps ». Pendant le gel : ni candidature, ni relance, ni offre. Journée allégée (habitudes et priorité 1) si rien n'a été coché la veille ou si l'énergie est restée à 2 ou moins deux soirs de suite. Offres à traiter : hors suivi, secteur visé, score ≥ 70, publiées depuis 14 jours, dans vos zones ou V.I.E, seulement un jour avec une habitude de candidature.
+- **Débrief du soir** : éléments du jour (cocher ici coche aussi les tâches et habitudes), réponses reçues (candidature, étape, issue : le statut du suivi est mis à jour avec son historique et l'étape enregistrée), énergie de 1 à 5, blocage, priorité de demain. Après enregistrement : les trois priorités de demain et le fait le plus solide du jour. Le dimanche, bilan de la semaine (candidatures, messages à une personne nommée, mock interviews, comparés aux objectifs ; refus par étape ; « Ce que je change »).
+- **Plan** : phases repliables, édition en ligne de la fenêtre, de la priorité et des minutes ; tâches personnelles (`U-1`, `U-2`…) supprimables, tâches du pack non supprimables ; habitudes en lecture seule.
+- **Cibles** : tableau filtrable et triable, édition en ligne (statut, contact, prochaine action et date, notes), ajout, compteurs par statut, lien « Offres de cette entreprise ».
+- **Journal** : entrées du plus récent au plus ancien, avec les bilans hebdomadaires.
+- **Profil** : audit du dossier. Critères automatiques (modèle de CV présent, aucun crochet, anglais complet, aucun terme à éviter dans les textes que chaque cluster peut rendre, volume de la semaine, secteurs visés, taux de réponse sur les candidatures de plus de 14 jours, au moins un entretien parmi les 20 dernières, aucune relance en retard de plus de 3 jours) et critères manuels du pack, à cocher. Score réussis / évalués (un critère non évaluable ne compte pas), historique, et un diagnostic du tunnel en une phrase une fois assez de candidatures envoyées (`lib/mission/audit.ts`).
+- **Importer / Exporter** : collage ou fichier, Prévisualiser, Importer ; Exporter l'état actuel (`mission-AAAA-MM-JJ.json`, même format, tâches cochées comprises) ; Réinitialiser la mission (taper `RÉINITIALISER`).
+
+L'import fusionne sans perte : brief, plan et termes à éviter remplacés ; critères manuels fusionnés par `id` (date de validation gardée) ; tâches par `id` créées ou mises à jour, sauf `done_at` et `origin` (une tâche absente du pack reste) ; cibles par nom normalisé créées ou complétées sur les champs vides seulement (le statut n'est remplacé que s'il vaut encore `a_verifier`). Après l'import, les secteurs des offres sont reclassés. Données : tables `mission_*` et réglages `mission_plan`, `mission_audit` de la base locale (`lib/mission/store.ts`).
+
+Format du pack (exemple fictif ; `category` libre, valeurs connues : `candidature`, `cv`, `github`, `vitrine`, `reseau`, `projet-java`, `orderbook`, `entretien`, `domaine`, `admin`, `outil` ; `priority` 1 à 3 ; `days` de `mon` à `sun` ; statut d'une cible : `a_verifier`, `a_contacter`, `contacte`, `candidature`, `entretien`, `refus`, `offre`, `ecartee` ; `country` : code ISO à 2 lettres ou `VIE`) :
+
+```json
+{
+  "type": "jobscout-mission-pack",
+  "version": 1,
+  "brief": "# Campagne démo\n\nUn poste de développeur junior.",
+  "plan": {
+    "start": "2026-11-02",
+    "offer_deadline": "2027-01-31",
+    "start_target": "2027-02-01",
+    "budget_minutes": { "mon": 180, "tue": 180, "wed": 180, "thu": 180, "fri": 180, "sat": 480, "sun": 300 },
+    "freeze": { "from": "2026-12-19", "to": "2027-01-04", "note": "Recrutement à l'arrêt : préparation uniquement." },
+    "phases": [{ "id": "P1", "label": "Vitrine", "from": "2026-11-02", "to": "2026-11-08" }],
+    "habits": [{ "id": "H-CAND", "title": "Une candidature ciblée", "minutes": 60, "days": ["mon", "tue", "wed", "thu", "fri"], "from": "2026-11-09", "to": "2027-01-31", "category": "candidature" }],
+    "kpi_weekly": { "candidatures_ciblees": 10, "messages_nommes": 8, "mock_interviews": 2 },
+    "diagnostic": { "min_candidatures": 40, "min_response_rate": 0.1 }
+  },
+  "tasks": [{ "id": "P1-01", "phase": "P1", "title": "Mettre le CV à jour", "minutes": 60, "window": ["2026-11-02", "2026-11-04"], "priority": 1, "category": "cv" }],
+  "targets": [{ "company": "Banque Exemple SA", "city": "Genève", "country": "CH", "sector": "finance", "type": "Banque privée", "tier": "A", "cv": "F", "angle": "Systèmes fiables", "contact": "", "status": "a_verifier", "next": "" }],
+  "audit": {
+    "forbidden_terms": [{ "cluster": "F", "terms": ["mot à éviter"] }],
+    "manual": [{ "id": "linkedin", "label": "Profil LinkedIn à jour" }]
+  }
+}
+```
+
+Routes : `GET /api/mission/today?date=`, `POST /api/mission/tasks` et `POST|DELETE /api/mission/tasks/[id]`, `POST /api/mission/habits/[id]`, `POST /api/mission/relance/[candidatureId]`, `GET|PUT /api/mission/journal/[date]`, `GET|POST|PUT /api/mission/targets`, `POST /api/mission/import`, `GET /api/mission/export`, `POST /api/mission/reset`, `POST /api/mission/audit`, `POST /api/mission/audit/manual`, `POST /api/mission/prepare/contact`, `POST /api/mission/prepare/track` — entrées validées par Zod, champs modifiables en liste blanche.
 
 ## Suivi des candidatures
 
