@@ -32,6 +32,14 @@ export function getDb(): DatabaseSync {
     } catch {}
   }
 
+  // Secteur de l'employeur (lib/scoring/sector.ts), calculé à l'écriture et au démarrage.
+  for (const column of ["sector TEXT", "sector_reason TEXT"]) {
+    try {
+      db.exec(`ALTER TABLE offres ADD COLUMN ${column}`);
+    } catch {}
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_offres_sector ON offres(sector)");
+
   _db = db;
   return db;
 }

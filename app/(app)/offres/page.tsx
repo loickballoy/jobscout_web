@@ -6,6 +6,8 @@ import { ScanButton } from "./scan-button";
 import { AddOffreButton } from "./add-offre-button";
 import { getSearchZones } from "@/lib/zones-store";
 import { getJuniorOnly } from "@/lib/seniority-store";
+import { getTargetSectors } from "@/lib/sector-store";
+import { parseSectorFilter, sectorsForFilter } from "@/lib/scoring/sector";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +17,8 @@ function plural(count: number, word: string): string {
   return `${numberFormat.format(count)} ${word}${count > 1 ? "s" : ""}`;
 }
 
-export default async function OffresPage({ searchParams }: { searchParams: Promise<{ vie?: string; score?: string }> }) {
-  const { vie, score } = await searchParams;
+export default async function OffresPage({ searchParams }: { searchParams: Promise<{ vie?: string; score?: string; secteur?: string; entreprise?: string }> }) {
+  const { vie, score, secteur, entreprise } = await searchParams;
   const vieOnly = vie === "1";
   // ?score=70 (carte « Offres à 70 et plus » de l'accueil) active la puce de score à ce seuil.
   const minScore = parseMinScore(score);
@@ -26,7 +28,11 @@ export default async function OffresPage({ searchParams }: { searchParams: Promi
   const zones = getSearchZones();
   // « Postes junior uniquement » (Profil) : la liste démarre sans les postes seniors.
   const juniorOnly = getJuniorOnly();
-  const initial = searchOffres({ contracts: vieOnly ? ["vie"] : [], minScore, home, zones, zonesOnly: zones.length > 0, juniorOnly });
+  // Secteur (?secteur=…, « Secteurs visés » par défaut) et nom d'entreprise (?entreprise=…, lien des cibles de la Mission).
+  const sectorFilter = parseSectorFilter(secteur);
+  const targetSectors = getTargetSectors();
+  const query = (entreprise ?? "").slice(0, 200);
+  const initial = searchOffres({ query, contracts: vieOnly ? ["vie"] : [], minScore, home, zones, zonesOnly: zones.length > 0, juniorOnly, sectors: sectorsForFilter(sectorFilter, targetSectors), targetSectors });
   // Ville du profil proposée (jamais enregistrée d'office) ; le sélecteur la masque tant qu'une ville est choisie.
   const homeSuggestion = suggestedDistanceHome();
   // Total et V.I.E lus dans les facettes (sans le filtre de score, pour décrire la base) : mêmes chiffres que la liste et la puce « V.I.E ».
@@ -45,7 +51,7 @@ export default async function OffresPage({ searchParams }: { searchParams: Promi
         subtitle={subtitle}
         actions={<div className="flex flex-wrap gap-2"><AddOffreButton /><ScanButton /></div>}
       />
-      <OffresList initialResult={initial} initialVieOnly={vieOnly} initialMinScore={minScore} homeSuggestion={homeSuggestion} initialZonesOnly={zones.length > 0} initialJuniorOnly={juniorOnly} />
+      <OffresList initialResult={initial} initialVieOnly={vieOnly} initialMinScore={minScore} homeSuggestion={homeSuggestion} initialZonesOnly={zones.length > 0} initialJuniorOnly={juniorOnly} initialSector={sectorFilter} initialQuery={query} />
     </>
   );
 }

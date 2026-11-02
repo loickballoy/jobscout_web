@@ -11,6 +11,7 @@ import { ActionsPanel } from "./actions";
 import { formatRelativeDate, scoreColor } from "@/lib/utils";
 import { CONTRACT_LABELS } from "@/lib/contracts";
 import { sourceLabel as sourceLabelOf } from "@/lib/sources-meta";
+import { SECTOR_LABELS } from "@/lib/scoring/sector";
 import { isServerMode } from "@/lib/server-mode";
 import { getCvTemplate } from "@/lib/cvtemplate/store";
 import { pickCluster } from "@/lib/cvtemplate/select";
@@ -103,6 +104,12 @@ export default async function OffreDetailPage({ params }: { params: Promise<{ id
         </div>
         <div className="mt-5 flex flex-wrap items-center gap-2">
           <Badge>{sourceLabel}</Badge>
+          {offre.sector && (
+            <Badge variant={offre.sector === "autre" ? "default" : "info"} title={offre.sector_reason ?? undefined}>
+              {SECTOR_LABELS[offre.sector]}
+            </Badge>
+          )}
+          {offre.sector_reason && <span className="text-caption text-textSecondary">{offre.sector_reason}</span>}
           {contractLabel && <Badge variant={offre.contract_category === "vie" ? "info" : "default"}>{contractLabel}</Badge>}
           {rawContract && <Badge>{rawContract}</Badge>}
           {levelLabel && (

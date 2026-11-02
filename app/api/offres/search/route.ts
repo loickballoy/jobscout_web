@@ -4,6 +4,8 @@ import { parseMinScore, searchOffres, type OffersSort } from "@/lib/db/offres";
 import { getDistanceHome } from "@/lib/distance/home";
 import { isDistanceRadius } from "@/lib/distance/format";
 import { getSearchZones } from "@/lib/zones-store";
+import { getTargetSectors } from "@/lib/sector-store";
+import { parseSectorFilter, sectorsForFilter } from "@/lib/scoring/sector";
 
 export const runtime = "nodejs";
 
@@ -18,6 +20,8 @@ export async function GET(req: NextRequest) {
   const radius = (params.get("radius") ?? "").trim();
   const radiusKm = /^\d{1,3}$/.test(radius) && isDistanceRadius(Number(radius)) ? Number(radius) : null;
   const page = Number(params.get("page") ?? "1");
+  // Secteur de l'employeur (?secteur=vises par défaut) : « Secteurs visés » suit le Profil.
+  const targetSectors = getTargetSectors();
   const result = searchOffres({
     query: (params.get("q") ?? "").slice(0, 200),
     source: params.get("source") ?? "",
@@ -35,6 +39,8 @@ export async function GET(req: NextRequest) {
     zones: getSearchZones(),
     zonesOnly: params.get("zones") === "1",
     juniorOnly: params.get("junior") === "1",
+    sectors: sectorsForFilter(parseSectorFilter(params.get("secteur")), targetSectors),
+    targetSectors,
     page: Number.isFinite(page) ? page : 1,
   });
   return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });

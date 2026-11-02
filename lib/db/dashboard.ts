@@ -4,6 +4,8 @@ import { detectVie } from "@/lib/vie";
 
 // Requêtes propres à l'accueil. Les chiffres affichés doivent concorder avec la page
 // vers laquelle chaque carte renvoie : on réutilise donc les mêmes règles que la liste.
+// Les chiffres portent sur tous les secteurs d'employeur : les cartes ouvrent la page
+// Offres avec ?secteur=tous, sans quoi le filtre « Secteurs visés » les contredirait.
 
 const RECENT_DAYS = 7;
 
