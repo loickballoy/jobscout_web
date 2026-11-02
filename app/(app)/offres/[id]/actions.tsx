@@ -292,7 +292,8 @@ export function ActionsPanel({
           : "Générer les documents"}
       </Button>
 
-      {templateClusters.length > 0 && (
+      {/* Sélecteur affiché ici seulement si aucun panneau parent (Préparer la candidature) ne le porte. */}
+      {templateClusters.length > 0 && !onClusterChange && (
         <label className="block text-small">
           <span className="mb-1 block font-semibold">CV à utiliser</span>
           <select

@@ -7,14 +7,19 @@ import { listDocuments, offreFolderPath } from "@/lib/db/documents";
 import { getDb } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 import { DescriptionRenderer } from "@/components/app/description-renderer";
-import { ActionsPanel } from "./actions";
+import { OfferWorkspace } from "./offer-workspace";
+import type { PrepareProps } from "./prepare-panel";
+import { offerVerdict } from "@/lib/mission/verdict";
+import { getTargetSectors } from "@/lib/sector-store";
+import { getTargetByCompany } from "@/lib/mission/store";
+import { parseContact } from "@/lib/mission/prepare";
 import { formatRelativeDate, scoreColor } from "@/lib/utils";
 import { CONTRACT_LABELS } from "@/lib/contracts";
 import { sourceLabel as sourceLabelOf } from "@/lib/sources-meta";
 import { SECTOR_LABELS } from "@/lib/scoring/sector";
 import { isServerMode } from "@/lib/server-mode";
 import { getCvTemplate } from "@/lib/cvtemplate/store";
-import { pickCluster } from "@/lib/cvtemplate/select";
+import { clusterReason, pickCluster } from "@/lib/cvtemplate/select";
 import { classifySeniority, seniorityLabel } from "@/lib/seniority";
 import { getProfile } from "@/lib/db/queries";
 import { getExperienceYears } from "@/lib/seniority-store";
@@ -53,6 +58,31 @@ export default async function OffreDetailPage({ params }: { params: Promise<{ id
       })
     : null;
 
+  // Panneau « Préparer la candidature » : verdict, CV, contact, message court, suivi.
+  const prepare: PrepareProps | null = profile
+    ? {
+        offreId: offre.id,
+        verdict: offerVerdict({
+          title: offre.title,
+          description: offre.description_text,
+          sector: offre.sector,
+          targetSectors: getTargetSectors(),
+          inZone: zones.length ? inZones({ lat: geo.lat, lng: geo.lng, precision: geo.precision, code: geo.lat !== null ? ("code" in geo ? geo.code ?? null : null) : null }, zones) : null,
+          contract: offre.contract_category,
+          preferredContracts: profile.preferred_contracts ?? [],
+          seniority: classifySeniority(offre.title, offre.description_text),
+          profileLanguages: profile.languages,
+        }),
+        autoCluster: cvTemplate && probable ? { id: probable.id, name: probable.name, reason: clusterReason(cvTemplate, offre) } : null,
+        clusters: cvTemplate ? cvTemplate.clusters.map((c) => ({ id: c.id, name: c.name })) : [],
+        initialContact: (() => {
+          const c = parseContact(getTargetByCompany(offre.company)?.contact);
+          return { name: c.name, role: c.role ?? "", url: c.url ?? "" };
+        })(),
+        initialTracked: false,
+      }
+    : null;
+
   const docs = listDocuments({ offreId: offre.id });
   const cvPdf = docs.find((d) => d.type === "cv" && d.format === "pdf") ?? null;
   const cvDocx = docs.find((d) => d.type === "cv" && d.format === "docx") ?? null;
@@ -60,6 +90,7 @@ export default async function OffreDetailPage({ params }: { params: Promise<{ id
   const lmDocx = docs.find((d) => d.type === "lm" && d.format === "docx") ?? null;
   const msgDoc = docs.find((d) => d.type === "msg") ?? null;
   const existingApplication = getDb().prepare("SELECT status FROM candidatures WHERE offre_id = ? LIMIT 1").get(offre.id) as { status: string } | undefined;
+  if (prepare) prepare.initialTracked = !!existingApplication && existingApplication.status !== "en_cours";
   const score = scoreColor(offre.score ?? 0);
   const distance = offerDistanceText(offre);
   const sourceLabel = sourceLabelOf(offre.source);
@@ -125,16 +156,19 @@ export default async function OffreDetailPage({ params }: { params: Promise<{ id
 
       <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_340px] xl:gap-7">
         <aside className="order-1 space-y-5 xl:order-2 xl:sticky xl:top-8 xl:self-start">
-          <ActionsPanel
-            offreId={offre.id}
-            offreUrl={offre.url}
-            isVie={offre.contract_category === "vie"}
-            initial={{ cv_pdf_id: cvPdf?.id ?? null, cv_docx_id: cvDocx?.id ?? null, lm_pdf_id: lmPdf?.id ?? null, lm_docx_id: lmDocx?.id ?? null, msg_id: msgDoc?.id ?? null }}
-            initialTrackingStatus={existingApplication?.status ?? null}
-            initialFolder={docs.length > 0 ? offreFolderPath(offre.id, offre.company, offre.title) : null}
-            canOpenFolder={!isServerMode()}
-            templateCluster={templateCluster}
-            templateClusters={cvTemplate ? cvTemplate.clusters.map((c) => ({ id: c.id, name: c.name })) : []}
+          <OfferWorkspace
+            prepare={prepare}
+            actions={{
+              offreId: offre.id,
+              offreUrl: offre.url,
+              isVie: offre.contract_category === "vie",
+              initial: { cv_pdf_id: cvPdf?.id ?? null, cv_docx_id: cvDocx?.id ?? null, lm_pdf_id: lmPdf?.id ?? null, lm_docx_id: lmDocx?.id ?? null, msg_id: msgDoc?.id ?? null },
+              initialTrackingStatus: existingApplication?.status ?? null,
+              initialFolder: docs.length > 0 ? offreFolderPath(offre.id, offre.company, offre.title) : null,
+              canOpenFolder: !isServerMode(),
+              templateCluster: templateCluster,
+              templateClusters: cvTemplate ? cvTemplate.clusters.map((c) => ({ id: c.id, name: c.name })) : [],
+            }}
           />
           {offre.score_breakdown && (
             <section aria-labelledby="score-title" className="glass-panel p-5">
