@@ -21,6 +21,9 @@ export type CandidatureRow = {
   /** Offre acceptée : salaire et date de début (vitrine). */
   offer_salary: string | null;
   offer_start: string | null;
+  /** Mission : étape de la dernière réponse et nombre de relances. */
+  response_stage: string | null;
+  relance_count: number;
 };
 
 export type CandidatureWithOffre = CandidatureRow & {
@@ -210,6 +213,20 @@ export function updateCandidature(
   params.push(id);
   getDb().prepare(`UPDATE candidatures SET ${fields.join(", ")} WHERE id = ?`).run(...params);
   if (patch.status && before !== undefined && before !== patch.status) recordStatus(id, patch.status);
+}
+
+export const RESPONSE_STAGES = ["filtre_auto", "recruteur", "technique", "final"] as const;
+export type ResponseStage = (typeof RESPONSE_STAGES)[number];
+export const RESPONSE_STAGE_LABELS: Record<ResponseStage, string> = {
+  filtre_auto: "Filtre automatique",
+  recruteur: "Recruteur",
+  technique: "Technique",
+  final: "Final",
+};
+
+/** Étape atteinte par la dernière réponse reçue (débrief du soir de la Mission). */
+export function setResponseStage(id: number, stage: ResponseStage): void {
+  getDb().prepare("UPDATE candidatures SET response_stage = ? WHERE id = ?").run(stage, id);
 }
 
 function sqlNow(): string {

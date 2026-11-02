@@ -1,13 +1,14 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Briefcase, FileText, FolderOpen, User, Search, LayoutTemplate } from "lucide-react";
+import { LayoutDashboard, Briefcase, FileText, FolderOpen, User, Search, LayoutTemplate, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./theme-toggle";
 import { VersionBadge } from "./version-badge";
 import { QuotaBadge } from "./quota-badge";
 
 const items = [
+  { href: "/mission", label: "Mission", icon: Target },
   { href: "/dashboard", label: "Accueil", icon: LayoutDashboard },
   { href: "/offres", label: "Offres", icon: Briefcase },
   { href: "/candidatures", label: "Candidatures", icon: FileText },
@@ -83,7 +84,7 @@ export function Sidebar({
         </div>
       </aside>
 
-      <nav aria-label="Navigation mobile" className="glass-panel glass-float fixed inset-x-2 bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-40 grid grid-cols-6 !rounded-[22px] px-1 py-1.5 sm:inset-x-3 sm:px-1.5 lg:hidden">
+      <nav aria-label="Navigation mobile" className="glass-panel glass-float fixed inset-x-2 bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-40 grid grid-cols-7 !rounded-[22px] px-1 py-1.5 sm:inset-x-3 sm:px-1.5 lg:hidden">
         {items.map((item) => {
           const active = isActive(item.href);
           const Icon = item.icon;
