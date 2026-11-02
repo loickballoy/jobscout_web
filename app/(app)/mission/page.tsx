@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { listCandidatures } from "@/lib/db/candidatures";
 import { loadDay, todayIso } from "@/lib/mission/load";
-import { getJournalEntry, getMissionPlan, listJournal, listMissionTargets, listMissionTasks } from "@/lib/mission/store";
+import { getAuditConfig, getJournalEntry, getMissionPlan, listJournal, listMissionTargets, listMissionTasks } from "@/lib/mission/store";
 import { weekFigures } from "@/lib/mission/debrief";
 import { addDays } from "@/lib/mission/today";
 import { TodayTab } from "./today-tab";
@@ -14,6 +14,8 @@ import { PlanTab } from "./plan-tab";
 import { TargetsTab } from "./targets-tab";
 import { ImportTab } from "./import-tab";
 import { BriefButton } from "./brief-button";
+import { AuditTab } from "./audit-tab";
+import { auditHistory } from "@/lib/mission/audit-run";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +25,7 @@ const TABS = [
   { id: "plan", label: "Plan" },
   { id: "cibles", label: "Cibles" },
   { id: "journal", label: "Journal" },
+  { id: "profil", label: "Profil" },
   { id: "importer", label: "Importer / Exporter" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
@@ -86,6 +89,7 @@ export default async function MissionPage({ searchParams }: { searchParams: Prom
       {tab === "plan" && mission && <PlanTab plan={mission.plan} tasks={listMissionTasks()} today={date} />}
       {tab === "cibles" && <TargetsTab targets={listMissionTargets()} />}
       {tab === "journal" && <Journal />}
+      {tab === "profil" && <AuditTab history={auditHistory()} manual={getAuditConfig().manual} />}
       {tab === "importer" && <ImportTab hasMission={!!mission} />}
     </>
   );
